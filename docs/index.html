@@ -481,8 +481,8 @@ app/
     </div>
 </div>
 
-<!-- ---- Qualifier Support ---- -->
-<h2>Full Qualifier Support</h2>
+<!-- ---- Supported Patterns ---- -->
+<h2>Supported CDI Patterns</h2>
 
 <p>The extension handles the full spectrum of CDI injection patterns:</p>
 
@@ -511,6 +511,16 @@ app/
             <td class="yes">Yes</td>
         </tr>
         <tr>
+            <td>Constructor injection</td>
+            <td><code>@Inject MyBean(LogService log)</code></td>
+            <td class="yes">Yes</td>
+        </tr>
+        <tr>
+            <td>Initializer method</td>
+            <td><code>@Inject void init(ValidationService vs)</code></td>
+            <td class="yes">Yes</td>
+        </tr>
+        <tr>
             <td><code>@Named</code> qualifier</td>
             <td><code>@Inject @Named("primary") AuditService</code></td>
             <td class="yes">Yes, with matching name</td>
@@ -531,6 +541,21 @@ app/
             <td class="yes">Yes, with exact value</td>
         </tr>
         <tr>
+            <td><code>@Nonbinding</code> members</td>
+            <td><code>@Inject @Traced(description="...") TracingService</code></td>
+            <td class="yes">Yes, ignoring non-binding values</td>
+        </tr>
+        <tr>
+            <td>Producer method parameter</td>
+            <td><code>@Produces String format(FormatService fs)</code></td>
+            <td class="yes">Yes</td>
+        </tr>
+        <tr>
+            <td>Observer method parameter</td>
+            <td><code>void on(@Observes Event e, LogService log)</code></td>
+            <td class="yes">Yes</td>
+        </tr>
+        <tr>
             <td>Satisfied by real bean</td>
             <td><code>@Inject @Premium HealthCheck</code></td>
             <td class="no">No &mdash; real bean wins</td>
@@ -539,6 +564,11 @@ app/
             <td>Stereotype + qualifier</td>
             <td>Scope from stereotype, qualifier declared directly</td>
             <td class="no">Correctly resolved</td>
+        </tr>
+        <tr>
+            <td>DeltaSpike partial bean</td>
+            <td><code>@PartialBeanBinding</code> types</td>
+            <td class="no">Skipped &mdash; DeltaSpike provides the proxy</td>
         </tr>
     </tbody>
 </table>

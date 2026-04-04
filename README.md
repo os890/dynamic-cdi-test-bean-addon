@@ -30,11 +30,20 @@ for every type that has no matching bean.
 
 ### Supported injection point types
 
-| Type                        | Example                          |
-|-----------------------------|----------------------------------|
-| Interface                   | `@Inject AuditService`           |
-| Concrete class              | `@Inject NotificationSender`     |
-| Parameterized generic       | `@Inject BaseDao<Order>`         |
+| Pattern                     | Example                                      |
+|-----------------------------|----------------------------------------------|
+| Interface                   | `@Inject AuditService`                       |
+| Concrete class              | `@Inject NotificationSender`                 |
+| Parameterized generic       | `@Inject BaseDao<Order>`                     |
+| Constructor injection       | `@Inject MyBean(LogService log)`             |
+| Initializer method          | `@Inject void init(ValidationService vs)`    |
+| `@Named` qualifier          | `@Inject @Named("primary") AuditService`     |
+| Custom qualifier            | `@Inject @Premium PaymentService`            |
+| Multiple qualifiers         | `@Inject @Premium @Reliable ShippingService` |
+| Qualifier with member       | `@Inject @ServiceType("express") CacheService` |
+| `@Nonbinding` members       | `@Inject @Traced(description="...") TracingService` |
+| Producer method parameter   | `@Produces String format(FormatService fs)`  |
+| Observer method parameter   | `void on(@Observes Event e, LogService log)` |
 
 ## Usage
 
@@ -157,7 +166,7 @@ automatically during `mvn clean install`:
 | Plugin                          | Phase      | Purpose                                                        |
 |---------------------------------|------------|----------------------------------------------------------------|
 | **maven-compiler-plugin**       | `compile`  | `-Xlint:all` with `failOnWarning` — all compiler warnings are errors |
-| **maven-enforcer-plugin**       | `validate` | Java 17+, Maven 3.6.3+, dependency convergence, banned `javax.*` dependencies, no duplicate classes |
+| **maven-enforcer-plugin**       | `validate` | Java 25+, Maven 3.6.3+, dependency convergence, banned `javax.*` dependencies, no duplicate classes |
 | **maven-checkstyle-plugin**     | `validate` | Code style: no star imports, braces on all blocks, modifier order, whitespace rules, empty line separators |
 | **apache-rat-plugin**           | `validate` | Apache License 2.0 header present in all source files (Java, XML, service files, POM) |
 | **maven-javadoc-plugin**        | `package`  | Generates and attaches Javadoc JAR                             |
