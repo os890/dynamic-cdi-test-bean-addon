@@ -1,0 +1,727 @@
+<!--
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+
+      http://www.apache.org/licenses/LICENSE-2.0
+
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dynamic CDI Test Bean Addon &mdash; Auto-Mock Unsatisfied CDI Injection Points</title>
+    <style>
+        :root {
+            --bg: #0f1117;
+            --surface: #161b22;
+            --border: #30363d;
+            --text: #e6edf3;
+            --text-muted: #8b949e;
+            --accent: #58a6ff;
+            --accent-hover: #79c0ff;
+            --green: #3fb950;
+            --red: #f85149;
+            --orange: #d29922;
+            --code-bg: #1c2128;
+            --code-border: #262c36;
+            --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+            --font-mono: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', Consolas, monospace;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        html { scroll-behavior: smooth; }
+
+        body {
+            font-family: var(--font-sans);
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.7;
+            font-size: 17px;
+        }
+
+        /* ---- Hero ---- */
+        .hero {
+            background: linear-gradient(135deg, #0d1117 0%, #161b22 50%, #1a1f2b 100%);
+            border-bottom: 1px solid var(--border);
+            padding: 5rem 2rem 4rem;
+            text-align: center;
+        }
+
+        .hero h1 {
+            font-size: clamp(2rem, 5vw, 3.2rem);
+            font-weight: 800;
+            letter-spacing: -0.03em;
+            line-height: 1.2;
+            margin-bottom: 1.2rem;
+        }
+
+        .hero h1 span { color: var(--accent); }
+
+        .hero .subtitle {
+            font-size: 1.2rem;
+            color: var(--text-muted);
+            max-width: 640px;
+            margin: 0 auto 2.5rem;
+        }
+
+        .hero .badge-row {
+            display: flex;
+            gap: 0.6rem;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 0.3rem 0.8rem;
+            border-radius: 999px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            letter-spacing: 0.02em;
+            border: 1px solid var(--border);
+            background: var(--surface);
+            color: var(--text-muted);
+        }
+
+        .badge.green  { border-color: #238636; color: var(--green); }
+        .badge.blue   { border-color: #1f6feb; color: var(--accent); }
+        .badge.orange { border-color: #9e6a03; color: var(--orange); }
+
+        /* ---- Content ---- */
+        .content {
+            max-width: 820px;
+            margin: 0 auto;
+            padding: 3rem 2rem 5rem;
+        }
+
+        h2 {
+            font-size: 1.8rem;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+            margin: 3.5rem 0 1rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 1px solid var(--border);
+        }
+
+        h3 {
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin: 2rem 0 0.8rem;
+            color: var(--accent);
+        }
+
+        p { margin-bottom: 1rem; }
+
+        a {
+            color: var(--accent);
+            text-decoration: none;
+        }
+
+        a:hover { color: var(--accent-hover); text-decoration: underline; }
+
+        strong { color: #f0f6fc; }
+
+        /* ---- Code ---- */
+        pre {
+            background: var(--code-bg);
+            border: 1px solid var(--code-border);
+            border-radius: 8px;
+            padding: 1.2rem 1.4rem;
+            overflow-x: auto;
+            margin: 1rem 0 1.5rem;
+            font-size: 0.88rem;
+            line-height: 1.6;
+        }
+
+        code {
+            font-family: var(--font-mono);
+        }
+
+        p code, li code, td code {
+            background: var(--code-bg);
+            border: 1px solid var(--code-border);
+            border-radius: 4px;
+            padding: 0.15em 0.4em;
+            font-size: 0.9em;
+        }
+
+        /* Syntax highlights */
+        .kw { color: #ff7b72; }
+        .ty { color: #79c0ff; }
+        .fn { color: #d2a8ff; }
+        .st { color: #a5d6ff; }
+        .cm { color: #8b949e; font-style: italic; }
+        .an { color: #ffa657; }
+        .nr { color: #79c0ff; }
+
+        /* ---- Error block ---- */
+        .error-block {
+            background: #1c1012;
+            border: 1px solid #5c2022;
+            border-left: 4px solid var(--red);
+            border-radius: 8px;
+            padding: 1.2rem 1.4rem;
+            margin: 1rem 0 1.5rem;
+            font-family: var(--font-mono);
+            font-size: 0.88rem;
+            color: #f8837a;
+            overflow-x: auto;
+        }
+
+        /* ---- Log block ---- */
+        .log-block {
+            background: #0f1a0f;
+            border: 1px solid #1a4d1a;
+            border-left: 4px solid var(--green);
+            border-radius: 8px;
+            padding: 1.2rem 1.4rem;
+            margin: 1rem 0 1.5rem;
+            font-family: var(--font-mono);
+            font-size: 0.88rem;
+            color: #7ee787;
+            overflow-x: auto;
+        }
+
+        /* ---- Tables ---- */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1rem 0 1.5rem;
+            font-size: 0.95rem;
+        }
+
+        th {
+            text-align: left;
+            padding: 0.7rem 1rem;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            font-weight: 600;
+            color: var(--text);
+        }
+
+        td {
+            padding: 0.6rem 1rem;
+            border: 1px solid var(--border);
+            color: var(--text-muted);
+        }
+
+        tr:hover td { background: rgba(88, 166, 255, 0.04); }
+
+        td.yes { color: var(--green); font-weight: 600; }
+        td.no  { color: var(--text-muted); }
+
+        /* ---- Lists ---- */
+        ul, ol {
+            margin: 0.5rem 0 1.5rem 1.5rem;
+        }
+
+        li {
+            margin-bottom: 0.4rem;
+            color: var(--text-muted);
+        }
+
+        li strong { color: var(--text); }
+
+        /* ---- Steps ---- */
+        .steps {
+            counter-reset: step;
+            list-style: none;
+            margin-left: 0;
+            padding: 0;
+        }
+
+        .steps li {
+            counter-increment: step;
+            position: relative;
+            padding-left: 3rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .steps li::before {
+            content: counter(step);
+            position: absolute;
+            left: 0;
+            top: 0.1em;
+            width: 2rem;
+            height: 2rem;
+            background: var(--accent);
+            color: var(--bg);
+            font-weight: 700;
+            font-size: 0.9rem;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* ---- Cards ---- */
+        .card-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 1rem;
+            margin: 1.5rem 0;
+        }
+
+        .card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 1.2rem;
+        }
+
+        .card h4 {
+            font-size: 0.95rem;
+            font-weight: 600;
+            margin-bottom: 0.4rem;
+            color: var(--text);
+        }
+
+        .card p {
+            font-size: 0.88rem;
+            color: var(--text-muted);
+            margin: 0;
+            line-height: 1.5;
+        }
+
+        /* ---- Callout ---- */
+        .callout {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-left: 4px solid var(--accent);
+            border-radius: 8px;
+            padding: 1rem 1.4rem;
+            margin: 1.5rem 0;
+            font-size: 0.95rem;
+            color: var(--text-muted);
+        }
+
+        .callout strong { color: var(--accent); }
+
+        /* ---- Footer ---- */
+        footer {
+            text-align: center;
+            padding: 2rem;
+            color: var(--text-muted);
+            font-size: 0.85rem;
+            border-top: 1px solid var(--border);
+        }
+
+        footer a { color: var(--accent); }
+
+        /* ---- Responsive ---- */
+        @media (max-width: 600px) {
+            .hero { padding: 3rem 1.2rem 2.5rem; }
+            .content { padding: 2rem 1.2rem 3rem; }
+            pre { font-size: 0.8rem; padding: 1rem; }
+        }
+    </style>
+</head>
+<body>
+
+<!-- ============================================================ Hero -->
+<section class="hero">
+    <h1>
+        <span>Dynamic CDI Test Bean Addon</span><br>
+        Auto-Mock Unsatisfied CDI Injection Points
+    </h1>
+    <p class="subtitle">
+        A CDI portable extension that fills missing beans with Mockito mocks
+        at bootstrap. One test dependency. Zero configuration.
+    </p>
+    <div class="badge-row">
+        <span class="badge blue">CDI 4.1</span>
+        <span class="badge green">Mockito 5</span>
+        <span class="badge orange">JUnit 6</span>
+        <span class="badge">Java 25+</span>
+        <span class="badge">Apache License 2.0</span>
+    </div>
+</section>
+
+<!-- ============================================================ Content -->
+<main class="content">
+
+<!-- ---- The Problem ---- -->
+<h2>The Problem</h2>
+
+<p>
+    If you've worked on a multi-module CDI project, you've seen this:
+</p>
+
+<div class="error-block">
+WELD-001408: Unsatisfied dependencies for type BaseDao&lt;Order&gt;<br>
+&nbsp;&nbsp;at injection point [BackedAnnotatedField] @Inject private BaseService.dao
+</div>
+
+<p>
+    The container refuses to boot because a bean in your <code>common</code>
+    module injects a type whose implementation lives in <code>app</code>.
+    Production assembles everything fine &mdash; but your isolated module test
+    is dead on arrival.
+</p>
+
+<p>Consider a typical multi-module layout:</p>
+
+<pre><code>common/
+  src/main/java/
+    BaseEntity.java
+    BaseDao.java              <span class="cm">// abstract generic DAO</span>
+    BaseService.java          <span class="cm">// @Inject BaseDao&lt;E&gt;</span>
+    AuditService.java         <span class="cm">// interface &mdash; no impl here</span>
+
+app/
+  src/main/java/
+    Order.java                <span class="cm">// extends BaseEntity</span>
+    OrderDao.java             <span class="cm">// extends BaseDao&lt;Order&gt;</span>
+    OrderService.java         <span class="cm">// extends BaseService&lt;Order&gt;</span>
+    AuditServiceImpl.java     <span class="cm">// implements AuditService</span></code></pre>
+
+<p>
+    <code>BaseService&lt;E&gt;</code> declares <code>@Inject BaseDao&lt;E&gt;</code>.
+    When <code>OrderService</code> extends <code>BaseService&lt;Order&gt;</code>,
+    the injection point resolves to <code>BaseDao&lt;Order&gt;</code> &mdash; satisfied by
+    <code>OrderDao</code> in production. But when you test inside <code>common</code>,
+    neither <code>OrderDao</code> nor <code>AuditServiceImpl</code> are on the classpath.
+</p>
+
+<p>The usual workarounds are painful:</p>
+<ul>
+    <li><strong>Manual mock producers</strong> &mdash; a <code>@Produces</code> method
+        per missing type, maintained by hand, breaks when dependencies change.</li>
+    <li><strong>Integration test modules</strong> &mdash; heavyweight, slow feedback.</li>
+    <li><strong>Skip CDI tests entirely</strong> &mdash; defeats the purpose.</li>
+</ul>
+
+<!-- ---- The Solution ---- -->
+<h2>The Solution</h2>
+
+<p>
+    Add <strong>Dynamic CDI Test Bean Addon</strong> as a test dependency. Every unsatisfied
+    injection point is automatically filled with a Mockito mock. No configuration.
+    No boilerplate. The container starts, your tests run.
+</p>
+
+<pre><code><span class="kw">&lt;dependency&gt;</span>
+    <span class="kw">&lt;groupId&gt;</span><span class="st">org.os890.cdi.addon</span><span class="kw">&lt;/groupId&gt;</span>
+    <span class="kw">&lt;artifactId&gt;</span><span class="st">dynamic-cdi-test-bean-addon</span><span class="kw">&lt;/artifactId&gt;</span>
+    <span class="kw">&lt;version&gt;</span><span class="st">1.0.0-SNAPSHOT</span><span class="kw">&lt;/version&gt;</span>
+    <span class="kw">&lt;scope&gt;</span><span class="st">test</span><span class="kw">&lt;/scope&gt;</span>
+<span class="kw">&lt;/dependency&gt;</span></code></pre>
+
+<p>
+    The extension registers itself via
+    <code>META-INF/services/jakarta.enterprise.inject.spi.Extension</code>
+    &mdash; nothing else to wire up.
+</p>
+
+<!-- ---- How It Works ---- -->
+<h2>How It Works</h2>
+
+<p>The extension hooks into three CDI lifecycle events:</p>
+
+<h3>1. Collecting injection points</h3>
+
+<pre><code><span class="kw">&lt;T&gt;</span> <span class="kw">void</span> <span class="fn">collectInjectionPoints</span>(<span class="an">@Observes</span> <span class="ty">ProcessInjectionPoint</span>&lt;?, T&gt; pip) {
+    <span class="cm">// Records the type and qualifiers of every injection point</span>
+}
+
+<span class="kw">&lt;T&gt;</span> <span class="kw">void</span> <span class="fn">collectFromBean</span>(<span class="an">@Observes</span> <span class="ty">ProcessBean</span>&lt;T&gt; pb) {
+    <span class="cm">// Catches inherited generic injection points that some</span>
+    <span class="cm">// implementations miss in ProcessInjectionPoint</span>
+}</code></pre>
+
+<p>
+    The second observer is critical for <strong>OpenWebBeans compatibility</strong>
+    &mdash; OWB does not always fire <code>ProcessInjectionPoint</code> for inherited
+    generic fields like <code>BaseDao&lt;E&gt;</code> in an abstract superclass.
+</p>
+
+<h3>2. Registering mocks for unsatisfied types</h3>
+
+<pre><code><span class="kw">void</span> <span class="fn">registerMockBeans</span>(<span class="an">@Observes</span> <span class="ty">AfterBeanDiscovery</span> abd, <span class="ty">BeanManager</span> bm) {
+    <span class="kw">for</span> (<span class="ty">InjectionPointKey</span> key : collectedInjectionPoints) {
+        <span class="kw">if</span> (<span class="fn">isSatisfied</span>(key, bm)) {
+            <span class="kw">continue</span>;  <span class="cm">// real bean exists &mdash; don't mock</span>
+        }
+        abd.<span class="fn">addBean</span>(<span class="kw">new</span> <span class="ty">MockBean</span>&lt;&gt;(rawType, key.type, key.qualifiers));
+    }
+}</code></pre>
+
+<p>
+    For each unsatisfied injection point, a synthetic <code>@RequestScoped</code> bean
+    backed by <code>Mockito.mock()</code> is registered. The mock beans:
+</p>
+
+<div class="card-grid">
+    <div class="card">
+        <h4>PassivationCapable</h4>
+        <p>Implements the interface with a unique ID, satisfying Weld's requirement for normal-scoped beans.</p>
+    </div>
+    <div class="card">
+        <h4>Qualifier-Aware</h4>
+        <p>Carries the exact qualifiers from the injection point. Follows CDI spec rules for <code>@Default</code>.</p>
+    </div>
+    <div class="card">
+        <h4>@Named Support</h4>
+        <p>Returns the <code>@Named</code> value as the bean name when that qualifier is present.</p>
+    </div>
+    <div class="card">
+        <h4>Logged</h4>
+        <p>Every registered mock is logged at INFO level so you can see exactly what was mocked.</p>
+    </div>
+</div>
+
+<!-- ---- Qualifier Support ---- -->
+<h2>Full Qualifier Support</h2>
+
+<p>The extension handles the full spectrum of CDI injection patterns:</p>
+
+<table>
+    <thead>
+        <tr>
+            <th>Pattern</th>
+            <th>Example</th>
+            <th>Mocked?</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td>Interface, no impl</td>
+            <td><code>@Inject Greeting</code></td>
+            <td class="yes">Yes</td>
+        </tr>
+        <tr>
+            <td>Concrete class, no bean</td>
+            <td><code>@Inject NotificationSender</code></td>
+            <td class="yes">Yes</td>
+        </tr>
+        <tr>
+            <td>Parameterized generic</td>
+            <td><code>@Inject BaseDao&lt;Order&gt;</code></td>
+            <td class="yes">Yes</td>
+        </tr>
+        <tr>
+            <td><code>@Named</code> qualifier</td>
+            <td><code>@Inject @Named("primary") AuditService</code></td>
+            <td class="yes">Yes, with matching name</td>
+        </tr>
+        <tr>
+            <td>Custom qualifier</td>
+            <td><code>@Inject @Premium PaymentService</code></td>
+            <td class="yes">Yes, with <code>@Premium</code></td>
+        </tr>
+        <tr>
+            <td>Multiple qualifiers</td>
+            <td><code>@Inject @Premium @Reliable ShippingService</code></td>
+            <td class="yes">Yes, with both</td>
+        </tr>
+        <tr>
+            <td>Qualifier with value</td>
+            <td><code>@Inject @ServiceType("express") CacheService</code></td>
+            <td class="yes">Yes, with exact value</td>
+        </tr>
+        <tr>
+            <td>Satisfied by real bean</td>
+            <td><code>@Inject @Premium HealthCheck</code></td>
+            <td class="no">No &mdash; real bean wins</td>
+        </tr>
+        <tr>
+            <td>Stereotype + qualifier</td>
+            <td>Scope from stereotype, qualifier declared directly</td>
+            <td class="no">Correctly resolved</td>
+        </tr>
+    </tbody>
+</table>
+
+<!-- ---- Example ---- -->
+<h2>A Complete Test</h2>
+
+<p>
+    Uses only standard CDI SE APIs. No Weld helpers, no OWB utilities.
+</p>
+
+<pre><code><span class="kw">class</span> <span class="ty">OrderServiceTest</span> {
+
+    <span class="kw">static</span> <span class="ty">SeContainer</span> container;
+    <span class="kw">static</span> <span class="ty">RequestContextController</span> rc;
+
+    <span class="an">@BeforeAll</span>
+    <span class="kw">static void</span> <span class="fn">boot</span>() {
+        container = <span class="ty">SeContainerInitializer</span>.<span class="fn">newInstance</span>().<span class="fn">initialize</span>();
+        rc = container.<span class="fn">select</span>(<span class="ty">RequestContextController</span>.<span class="kw">class</span>).<span class="fn">get</span>();
+        rc.<span class="fn">activate</span>();
+    }
+
+    <span class="an">@AfterAll</span>
+    <span class="kw">static void</span> <span class="fn">shutdown</span>() {
+        rc.<span class="fn">deactivate</span>();
+        container.<span class="fn">close</span>();
+    }
+
+    <span class="an">@Test</span>
+    <span class="kw">void</span> <span class="fn">orderServiceStartsWithMockedDao</span>() {
+        <span class="ty">OrderService</span> service = container.<span class="fn">select</span>(<span class="ty">OrderService</span>.<span class="kw">class</span>).<span class="fn">get</span>();
+        <span class="fn">assertNotNull</span>(service);
+
+        <span class="cm">// The DAO is a Mockito mock &mdash; returns null by default</span>
+        <span class="fn">assertNull</span>(service.<span class="fn">getDao</span>().<span class="fn">findById</span>(<span class="nr">1L</span>));
+    }
+
+    <span class="an">@Test</span>
+    <span class="kw">void</span> <span class="fn">mockedDaoSupportsStubbingWithConcreteEntity</span>() {
+        <span class="ty">OrderService</span> service = container.<span class="fn">select</span>(<span class="ty">OrderService</span>.<span class="kw">class</span>).<span class="fn">get</span>();
+        <span class="ty">BaseDao</span>&lt;<span class="ty">Order</span>&gt; dao = service.<span class="fn">getDao</span>();
+
+        <span class="ty">Order</span> expected = <span class="kw">new</span> <span class="ty">Order</span>(<span class="st">"Widget"</span>);
+        <span class="ty">Mockito</span>.<span class="fn">when</span>(dao.<span class="fn">findById</span>(<span class="nr">42L</span>)).<span class="fn">thenReturn</span>(expected);
+
+        <span class="fn">assertEquals</span>(<span class="st">"Widget"</span>, dao.<span class="fn">findById</span>(<span class="nr">42L</span>).<span class="fn">getItem</span>());
+    }
+}</code></pre>
+
+<p>During bootstrap, the extension logs what it mocks:</p>
+
+<div class="log-block">
+[DynamicTestBean] Registering mock for: Greeting<br>
+[DynamicTestBean] Registering mock for: NotificationSender<br>
+[DynamicTestBean] Registering mock for: BaseDao&lt;Order&gt;<br>
+[DynamicTestBean] Registered 3 mock bean(s) for unsatisfied injection points.
+</div>
+
+<!-- ---- Compatibility ---- -->
+<h2>CDI Implementation Compatibility</h2>
+
+<p>
+    The extension uses only standard CDI 4.1 APIs and is verified against both
+    major implementations on every build:
+</p>
+
+<table>
+    <thead>
+        <tr><th>Implementation</th><th>Version</th><th>Profile</th></tr>
+    </thead>
+    <tbody>
+        <tr><td>OpenWebBeans</td><td>4.0.3</td><td><code>mvn test</code> (default)</td></tr>
+        <tr><td>Weld</td><td>5.1.4.Final</td><td><code>mvn test -Pweld</code></td></tr>
+    </tbody>
+</table>
+
+<div class="callout">
+    <strong>OWB + Java 25:</strong> OWB 4.0.3 ships with an older xbean-asm
+    that doesn't support Java 25 class files. The OWB profile overrides
+    xbean-asm and adds ASM 9.8 to resolve this.
+</div>
+
+<!-- ---- Third-party extensions ---- -->
+<h2>Third-Party CDI Extension Compatibility</h2>
+
+<p>
+    The addon is built exclusively on the standard CDI API &mdash; it has
+    <strong>no dependency</strong> on any third-party CDI extension or specific
+    CDI implementation. However, it detects types managed by other extensions
+    and avoids mocking them &mdash; preventing ambiguous resolution conflicts.
+</p>
+
+<h3>Apache DeltaSpike Partial Beans</h3>
+
+<p>
+    Types annotated with a
+    <code>@PartialBeanBinding</code> binding annotation are automatically
+    skipped. DeltaSpike's partial bean module provides the real proxy
+    implementation; the addon only mocks the handler's own unsatisfied
+    dependencies.
+</p>
+
+<pre><code><span class="an">@RepositoryBinding</span>                    <span class="cm">// carries @PartialBeanBinding &mdash; skipped by the addon</span>
+<span class="an">@ApplicationScoped</span>
+<span class="kw">public interface</span> <span class="ty">UserRepository</span> {
+    <span class="ty">String</span> <span class="fn">findUser</span>(<span class="ty">String</span> id);   <span class="cm">// implemented by RepositoryHandler</span>
+}
+
+<span class="an">@RepositoryBinding</span>
+<span class="an">@ApplicationScoped</span>
+<span class="kw">public class</span> <span class="ty">RepositoryHandler</span> <span class="kw">implements</span> <span class="ty">InvocationHandler</span> {
+    <span class="an">@Inject</span>
+    <span class="kw">private</span> <span class="ty">NotificationService</span> notificationService;  <span class="cm">// &larr; auto-mocked</span>
+    ...
+}</code></pre>
+
+<div class="callout">
+    <strong>No DeltaSpike dependency required.</strong> Detection uses annotation
+    name strings at runtime. If DeltaSpike is not on the classpath, the check
+    is a no-op.
+</div>
+
+<!-- ---- Getting Started ---- -->
+<h2>Getting Started</h2>
+
+<ol class="steps">
+    <li>
+        <strong>Add the dependency</strong> (test scope):
+<pre><code><span class="kw">&lt;dependency&gt;</span>
+    <span class="kw">&lt;groupId&gt;</span><span class="st">org.os890.cdi.addon</span><span class="kw">&lt;/groupId&gt;</span>
+    <span class="kw">&lt;artifactId&gt;</span><span class="st">dynamic-cdi-test-bean-addon</span><span class="kw">&lt;/artifactId&gt;</span>
+    <span class="kw">&lt;version&gt;</span><span class="st">1.0.0-SNAPSHOT</span><span class="kw">&lt;/version&gt;</span>
+    <span class="kw">&lt;scope&gt;</span><span class="st">test</span><span class="kw">&lt;/scope&gt;</span>
+<span class="kw">&lt;/dependency&gt;</span></code></pre>
+    </li>
+    <li>
+        <strong>Add a CDI SE implementation</strong> to your test classpath &mdash;
+        Weld SE (<code>weld-se-core</code>) or OpenWebBeans SE (<code>openwebbeans-se</code>).
+    </li>
+    <li>
+        <strong>Write your test</strong> with <code>SeContainerInitializer</code>.
+        The extension activates automatically via SPI. No <code>beans.xml</code>
+        changes, no producer methods, no mock registrations.
+    </li>
+</ol>
+
+<!-- ---- Requirements ---- -->
+<h2>Requirements</h2>
+
+<table>
+    <thead>
+        <tr><th>Dependency</th><th>Version</th><th>Scope</th></tr>
+    </thead>
+    <tbody>
+        <tr><td>Jakarta CDI API</td><td>4.1.0+</td><td>provided</td></tr>
+        <tr><td>Mockito</td><td>5.x+</td><td>provided</td></tr>
+        <tr><td>JUnit</td><td>6.0.3</td><td>test</td></tr>
+        <tr><td>Java</td><td>25+</td><td>&mdash;</td></tr>
+    </tbody>
+</table>
+
+<p>
+    Both CDI API and Mockito are <code>provided</code> scope &mdash; the consumer
+    controls the exact versions.
+</p>
+
+</main>
+
+<!-- ============================================================ Footer -->
+<footer>
+    <p>
+        <a href="https://github.com/os890/dynamic-cdi-test-bean-addon">Source on GitHub</a>
+        &nbsp;&middot;&nbsp;
+        <a href="https://www.apache.org/licenses/LICENSE-2.0">Apache License 2.0</a>
+    </p>
+    <p>
+        This is the first CDI extension from
+        <a href="https://github.com/os890">os890</a> created entirely in an
+        agentic AI workflow (Claude, Anthropic) &mdash; extension, test suite,
+        build configuration, and documentation.
+    </p>
+</footer>
+
+</body>
+</html>
