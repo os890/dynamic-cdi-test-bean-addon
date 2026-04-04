@@ -277,6 +277,8 @@
                 <configuration>
                     <excludes>
                         <exclude>README.md</exclude>
+                        <exclude>.claude/**</exclude>
+                        <exclude>docs/claude-skill.md</exclude>
                         <exclude>.gitignore</exclude>
                         <exclude>target/**</exclude>
                     </excludes>

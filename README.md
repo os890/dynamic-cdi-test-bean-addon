@@ -254,6 +254,19 @@ CDI implementations via Maven profiles:
 | **apache-rat-plugin**           | `validate` | Apache License 2.0 header present in all source files |
 | **maven-javadoc-plugin**        | `package`  | Generates and attaches Javadoc JAR |
 
+## Claude Code skill
+
+A [Claude Code](https://claude.ai/code) skill is included for AI-assisted
+test writing. To use it, copy the skill into your project:
+
+```bash
+mkdir -p .claude/skills/cdi-test
+cp docs/claude-skill.md .claude/skills/cdi-test/SKILL.md
+```
+
+Then use `/cdi-test MyServiceTest MyService` in Claude Code to generate
+a CDI test with auto-mocking and `@TestBean` support.
+
 ## Building
 
 ```bash
