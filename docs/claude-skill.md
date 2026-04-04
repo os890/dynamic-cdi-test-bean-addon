@@ -6,6 +6,19 @@ argument-hint: "[test-class-name] [bean-to-test]"
 
 # Dynamic CDI Test Bean Addon — Test Writing Guide
 
+## Maven dependency
+
+```xml
+<dependency>
+    <groupId>org.os890.cdi.addon</groupId>
+    <artifactId>dynamic-cdi-test-bean-addon</artifactId>
+    <version>1.0.0-SNAPSHOT</version>
+    <scope>test</scope>
+</dependency>
+```
+
+Also add a CDI SE implementation (Weld SE or OpenWebBeans SE) to the test classpath.
+
 ## Quick Start
 
 Every CDI test needs `@EnableTestBeans`. The extension handles container start, request scope, `@Inject` fields, and shutdown.
