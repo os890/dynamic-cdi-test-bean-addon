@@ -62,16 +62,9 @@ The extension registers itself via
 `META-INF/services/jakarta.enterprise.inject.spi.Extension` — no manual
 configuration is needed.
 
-### Test example (CDI SE, JUnit 6)
+### Basic test (zero configuration)
 
 ```java
-import jakarta.enterprise.context.control.RequestContextController;
-import jakarta.enterprise.inject.se.SeContainer;
-import jakarta.enterprise.inject.se.SeContainerInitializer;
-import org.junit.jupiter.api.*;
-
-import static org.junit.jupiter.api.Assertions.*;
-
 class MyServiceTest {
 
     static SeContainer container;
@@ -79,7 +72,6 @@ class MyServiceTest {
 
     @BeforeAll
     static void boot() {
-        // Full classpath scanning — the extension is loaded via SPI
         container = SeContainerInitializer.newInstance().initialize();
         rc = container.select(RequestContextController.class).get();
         rc.activate();
@@ -95,42 +87,51 @@ class MyServiceTest {
     void serviceStartsWithMockedDependencies() {
         MyService service = container.select(MyService.class).get();
         assertNotNull(service);
-        // The injected DAO is a Mockito mock — returns null by default
-        assertNull(service.getDao().findById(1L));
+        assertNull(service.getDao().findById(1L)); // Mockito default
     }
 }
 ```
 
-Registered mocks are logged at `INFO` level during container bootstrap —
-check the test output to see which types were mocked.
+### With @Inject into the test class
 
-## How it works
+`@EnableTestBeans` registers the test class as a `@Singleton` CDI bean and
+injects `@Inject` fields after container bootstrap:
 
-1. **`ProcessInjectionPoint`** — collects every injection point's type and
-   qualifiers, filtering out built-in CDI/JDK/vendor types.
-2. **`ProcessBean`** — catches inherited generic injection points that some
-   implementations (notably OpenWebBeans) do not report via
-   `ProcessInjectionPoint`.
-3. **`AfterBeanDiscovery`** — for each collected type with no matching bean,
-   registers a synthetic `@RequestScoped` bean backed by `Mockito.mock()`.
+```java
+@EnableTestBeans
+class MyServiceTest {
 
-The mock beans implement `PassivationCapable` with a unique ID to satisfy
-CDI container requirements for normal-scoped beans.
+    @Inject
+    MyService service;
 
-## Optional: Custom replacement beans with @TestBean
+    static SeContainer container;
 
-By default the extension fills unsatisfied injection points with Mockito
-mocks. If you need a hand-crafted implementation instead, declare it as a
-normal CDI bean with `@Alternative` (no `@Priority`) and activate it on
-your test class with `@EnableTestBeans` + `@TestBean`:
+    @BeforeAll
+    static void boot() {
+        container = SeContainerInitializer.newInstance().initialize();
+    }
+
+    @Test
+    void serviceIsInjected() {
+        assertNotNull(service);
+    }
+}
+```
+
+Use `@EnableTestBeans(addTestClass = false)` to disable this.
+
+## Custom replacement beans with @TestBean
+
+If you need a hand-crafted implementation instead of a Mockito mock, use
+`@TestBean` to activate `@Alternative` beans per test class:
+
+### Direct replacement
 
 ```java
 @Alternative
 @ApplicationScoped
 public class CustomGreeting implements Greeting {
-    public String greet(String name) {
-        return "Hello, " + name + "!";
-    }
+    public String greet(String name) { return "Hello, " + name + "!"; }
 }
 
 @EnableTestBeans
@@ -138,36 +139,77 @@ public class CustomGreeting implements Greeting {
 class MyTest { ... }
 ```
 
-For producer-based replacements:
+### Producer-based replacement
 
 ```java
+@Alternative
+@ApplicationScoped
+public class TestProducers {
+    @Produces @Named("primaryAudit")
+    AuditService audit() { return action -> { /* no-op */ }; }
+}
+
 @EnableTestBeans
 @TestBean(beanProducer = TestProducers.class)
 class MyTest { ... }
 ```
 
-Multiple `@TestBean` annotations on the same test class:
+### Inline producer fields
+
+The simplest pattern for one-off mocks with stubbing:
 
 ```java
 @EnableTestBeans
+class MyTest {
+    @Produces @TestBean
+    private static Greeting greeting = Mockito.mock(Greeting.class);
+}
+```
+
+### Composable meta-annotations
+
+Bundle `@TestBean` declarations into reusable annotations:
+
+```java
 @TestBean(bean = CustomGreeting.class)
-@TestBean(beanProducer = TestProducers.class)
+@TestBean(bean = CustomDao.class)
+@Retention(RUNTIME) @Target(TYPE)
+public @interface StandardMocks {}
+
+@StandardMocks
+@TestBean(beanProducer = AuditProducers.class)
+@Retention(RUNTIME) @Target(TYPE)
+public @interface FullTestSetup {}
+
+@EnableTestBeans
+@FullTestSetup
 class MyTest { ... }
 ```
 
-The custom beans define their own scope and qualifiers. The extension:
+Meta-annotations can be nested to any depth. Duplicate bean class references
+across annotations are deduplicated automatically.
 
-1. **Vetoes** unselected `@Alternative` beans (prevents their `@Produces`
-   methods from conflicting with mocks)
-2. **Enables** only the alternatives referenced by the active test class
-3. **Mocks** the remaining unsatisfied injection points
+### Whitelist mode
+
+`limitToTestBeans = true` vetoes ALL application beans except those
+explicitly declared via `@TestBean`. No auto-mocking occurs — only
+the whitelisted beans and CDI internals survive:
+
+```java
+@EnableTestBeans(limitToTestBeans = true)
+@TestBean(bean = CustomGreeting.class)
+class MyTest { ... }
+```
+
+### Test class isolation
 
 Multiple test classes on the same classpath can activate **different
-alternatives for the same type** without conflicts — the internal JUnit
+alternatives for the same type** without conflicts. The internal JUnit
 extension scopes each test class's `@TestBean` declarations independently.
+Unselected `@Alternative` beans are vetoed to prevent their `@Produces`
+methods from conflicting.
 
-
-### Package structure
+## Package structure
 
 | Package | Contents |
 |---------|----------|
@@ -209,7 +251,7 @@ ASM 9.8 to resolve this.
 |------------------|---------------------|
 | Jakarta CDI API  | 4.1.0 (provided)    |
 | Mockito          | 5.x (provided)      |
-| JUnit            | 6.0.3 (test)        |
+| JUnit            | 6.0.3 (provided)    |
 | Java             | 25+                 |
 
 Both CDI API and Mockito are `provided` scope — the consumer supplies the

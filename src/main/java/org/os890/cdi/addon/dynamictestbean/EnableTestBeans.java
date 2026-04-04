@@ -27,21 +27,65 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.os890.cdi.addon.dynamictestbean.internal.DynamicTestBeanJUnitExtension;
 
 /**
- * Enables test-class-scoped {@link TestBean} alternative activation.
+ * Enables CDI integration for the test class.
  *
- * <p>Place this annotation on a test class alongside one or more
- * {@link TestBean} annotations. The internal JUnit extension
- * (embedded via {@link ExtendWith}) sets the active test class before
- * container bootstrap, so the CDI extension reads {@code @TestBean}
- * only from this class and vetoes unselected {@code @Alternative}
- * beans.</p>
+ * <p>By default, the test class is registered as a {@code @Singleton}
+ * CDI bean, and {@code @Inject} fields on the test instance are
+ * injected after container bootstrap. Use {@link #addTestClass()} to
+ * disable this if needed.</p>
  *
- * <h2>Example</h2>
+ * <p>When combined with {@link TestBean} annotations, the extension
+ * also activates the referenced {@code @Alternative} beans and vetoes
+ * unselected alternatives.</p>
+ *
+ * <h2>Example: injection into test class</h2>
+ * <pre>{@code
+ * @EnableTestBeans
+ * class MyTest {
+ *
+ *     @Inject
+ *     MyService service;  // injected by CDI
+ *
+ *     static SeContainer container;
+ *
+ *     @BeforeAll
+ *     static void boot() {
+ *         container = SeContainerInitializer.newInstance().initialize();
+ *     }
+ *
+ *     @Test
+ *     void testService() {
+ *         assertNotNull(service);
+ *     }
+ * }
+ * }</pre>
+ *
+ * <h2>Example: with custom alternatives</h2>
  * <pre>{@code
  * @EnableTestBeans
  * @TestBean(bean = CustomGreeting.class)
- * @TestBean(beanProducer = TestProducers.class)
+ * class MyTest {
+ *
+ *     @Inject
+ *     Greeting greeting;  // CustomGreeting, not a mock
+ * }
+ * }</pre>
+ *
+ * <h2>Example: disable test class injection</h2>
+ * <pre>{@code
+ * @EnableTestBeans(addTestClass = false)
+ * @TestBean(bean = CustomGreeting.class)
  * class MyTest { ... }
+ * }</pre>
+ *
+ * <h2>Example: whitelist mode — only @TestBean beans survive</h2>
+ * <pre>{@code
+ * @EnableTestBeans(limitToTestBeans = true)
+ * @TestBean(bean = CustomGreeting.class)
+ * class MyTest {
+ *     // Only CustomGreeting and beans from inline @TestBean fields
+ *     // are active. Everything else is vetoed — no auto-mocking.
+ * }
  * }</pre>
  *
  * @see TestBean
@@ -50,4 +94,23 @@ import org.os890.cdi.addon.dynamictestbean.internal.DynamicTestBeanJUnitExtensio
 @Retention(RUNTIME)
 @Target(TYPE)
 public @interface EnableTestBeans {
+
+    /**
+     * Whether to register the test class as a {@code @Singleton} CDI
+     * bean and inject {@code @Inject} fields on the test instance.
+     * Defaults to {@code true}.
+     *
+     * @return {@code true} to enable test class injection
+     */
+    boolean addTestClass() default true;
+
+    /**
+     * When {@code true}, all discovered beans are vetoed except those
+     * explicitly declared via {@link TestBean}. No auto-mocking occurs.
+     * Only the whitelisted beans and the test class itself survive.
+     * Defaults to {@code false}.
+     *
+     * @return {@code true} to enable whitelist mode
+     */
+    boolean limitToTestBeans() default false;
 }

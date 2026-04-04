@@ -18,6 +18,7 @@
 package org.os890.cdi.addon.dynamictestbean.internal;
 
 import org.os890.cdi.addon.dynamictestbean.TestBean;
+import org.os890.cdi.addon.dynamictestbean.TestBeans;
 
 import jakarta.annotation.Priority;
 import jakarta.enterprise.context.RequestScoped;
@@ -25,7 +26,10 @@ import jakarta.enterprise.context.spi.CreationalContext;
 import jakarta.enterprise.event.Observes;
 import jakarta.enterprise.inject.Any;
 import jakarta.enterprise.inject.Default;
+import jakarta.enterprise.context.Dependent;
+import jakarta.enterprise.context.NormalScope;
 import jakarta.enterprise.inject.Alternative;
+import jakarta.inject.Scope;
 import jakarta.enterprise.inject.spi.AfterBeanDiscovery;
 import jakarta.enterprise.inject.spi.AfterTypeDiscovery;
 import jakarta.enterprise.inject.spi.ProcessAnnotatedType;
@@ -37,10 +41,13 @@ import jakarta.enterprise.inject.spi.PassivationCapable;
 import jakarta.enterprise.inject.spi.ProcessBean;
 import jakarta.enterprise.inject.spi.ProcessInjectionPoint;
 import jakarta.inject.Named;
+import jakarta.inject.Singleton;
 
 import java.lang.annotation.Annotation;
+import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
 import java.util.Arrays;
@@ -107,52 +114,174 @@ public class DynamicTestBeanExtension implements Extension {
     private static final Logger LOG = Logger.getLogger(DynamicTestBeanExtension.class.getName());
 
     private final Set<InjectionPointKey> collectedInjectionPoints = new LinkedHashSet<>();
+    private final Set<Type> inlineProducerTypes = new LinkedHashSet<>();
 
     /**
-     * <strong>Phase -1 — Veto unselected {@code @Alternative} beans.</strong>
+     * <strong>Phase -2 — Force discovery of scope-less alternatives.</strong>
      *
-     * <p>Vetoes {@code @Alternative} beans that are NOT referenced by any
-     * {@link TestBean} annotation on the active test class. This prevents
-     * their {@code @Produces} methods from registering beans that would
-     * conflict with the auto-generated Mockito mocks.</p>
-     *
-     * @param pat the process-annotated-type event
-     * @param <T> the annotated type
+     * <p>If a {@link TestBean}-referenced class has {@code @Alternative}
+     * but no CDI scope, it won't be discovered in
+     * {@code bean-discovery-mode="annotated"}. This observer adds it
+     * explicitly via {@code addAnnotatedType()} and assigns
+     * {@code @Dependent} as the default scope.</p>
      */
-    <T> void vetoUnselectedAlternatives(@Observes ProcessAnnotatedType<T> pat) {
-        Class<T> javaClass = pat.getAnnotatedType().getJavaClass();
-        if (!javaClass.isAnnotationPresent(Alternative.class)) {
-            return;
-        }
-
+    void forceDiscoveryOfScopelessAlternatives(
+            @Observes jakarta.enterprise.inject.spi.BeforeBeanDiscovery bbd) {
         Class<?> activeTestClass = DynamicTestBeanContext.getActiveTestClass();
         if (activeTestClass == null) {
-            // No @EnableTestBeans — veto ALL @Alternative beans
-            // (they have no @Priority, so they'd be inactive anyway,
-            // but vetoing prevents their producers from registering)
-            pat.veto();
             return;
         }
-
-        // Check if this alternative is selected by the active test class
-        Set<Class<?>> selected = getSelectedAlternatives(activeTestClass);
-        if (!selected.contains(javaClass)) {
-            LOG.info("[DynamicTestBean] Vetoing unselected @Alternative: " + javaClass.getName());
-            pat.veto();
+        for (Class<?> alt : getSelectedAlternatives(activeTestClass)) {
+            if (alt.isAnnotationPresent(Alternative.class) && !hasScopeAnnotation(alt)) {
+                bbd.addAnnotatedType(alt, "DynamicTestBean#" + alt.getName());
+                LOG.info("[DynamicTestBean] Forced discovery of scope-less @Alternative: "
+                        + alt.getName());
+            }
         }
     }
 
-    private static Set<Class<?>> getSelectedAlternatives(Class<?> testClass) {
-        Set<Class<?>> selected = new LinkedHashSet<>();
-        for (TestBean tb : testClass.getAnnotationsByType(TestBean.class)) {
-            if (tb.bean() != void.class) {
-                selected.add(tb.bean());
-            }
-            if (tb.beanProducer() != void.class) {
-                selected.add(tb.beanProducer());
+    /**
+     * <strong>Phase -1 — Veto beans based on mode.</strong>
+     *
+     * <p>In normal mode: vetoes unselected {@code @Alternative} beans to
+     * prevent their {@code @Produces} methods from conflicting with mocks.</p>
+     *
+     * <p>In whitelist mode ({@code limitToTestBeans = true}): vetoes ALL
+     * beans except those explicitly declared via {@link TestBean} and
+     * CDI/vendor internal types.</p>
+     *
+     * @param pat the process-annotated-type event
+     * @param bm  the bean manager
+     * @param <T> the annotated type
+     */
+    <T> void vetoUnselectedBeans(@Observes ProcessAnnotatedType<T> pat, BeanManager bm) {
+        Class<T> javaClass = pat.getAnnotatedType().getJavaClass();
+        Class<?> activeTestClass = DynamicTestBeanContext.getActiveTestClass();
+        Set<Class<?>> selected = activeTestClass != null
+                ? getSelectedAlternatives(activeTestClass) : Collections.emptySet();
+
+        if (DynamicTestBeanContext.isLimitToTestBeans() && activeTestClass != null) {
+            // Whitelist mode: veto everything except selected beans,
+            // the test class, and CDI/vendor internals
+            if (!selected.contains(javaClass)
+                    && !javaClass.equals(activeTestClass)
+                    && !isInternalType(javaClass)) {
+                pat.veto();
+                return;
             }
         }
+
+        // Normal mode (or selected bean in whitelist mode):
+        // handle @Alternative veto/scope logic
+        if (javaClass.isAnnotationPresent(Alternative.class)) {
+            if (activeTestClass == null) {
+                pat.veto();
+                return;
+            }
+            if (!selected.contains(javaClass)) {
+                LOG.info("[DynamicTestBean] Vetoing unselected @Alternative: " + javaClass.getName());
+                pat.veto();
+                return;
+            }
+            if (!hasScopeAnnotation(javaClass, bm)) {
+                pat.configureAnnotatedType().add(Dependent.Literal.INSTANCE);
+                LOG.info("[DynamicTestBean] Added @Dependent scope to: " + javaClass.getName());
+            }
+        }
+    }
+
+    /**
+     * Collects all {@link TestBean} references from the given class,
+     * recursively walking meta-annotations. Duplicates are filtered.
+     */
+    private static Set<Class<?>> getSelectedAlternatives(Class<?> testClass) {
+        Set<Class<?>> selected = new LinkedHashSet<>();
+        Set<Class<? extends Annotation>> visited = new LinkedHashSet<>();
+        collectTestBeans(testClass.getAnnotations(), selected, visited);
         return selected;
+    }
+
+    /**
+     * Recursively collects {@link TestBean} references from annotations
+     * and their meta-annotations. Tracks visited annotation types to
+     * prevent infinite loops with circular meta-annotations.
+     */
+    private static void collectTestBeans(Annotation[] annotations,
+                                         Set<Class<?>> selected,
+                                         Set<Class<? extends Annotation>> visited) {
+        for (Annotation ann : annotations) {
+            Class<? extends Annotation> annType = ann.annotationType();
+
+            if (ann instanceof TestBean) {
+                TestBean tb = (TestBean) ann;
+                if (tb.bean() != void.class) {
+                    selected.add(tb.bean());
+                }
+                if (tb.beanProducer() != void.class) {
+                    selected.add(tb.beanProducer());
+                }
+            } else if (ann instanceof TestBeans) {
+                for (TestBean tb : ((TestBeans) ann).value()) {
+                    if (tb.bean() != void.class) {
+                        selected.add(tb.bean());
+                    }
+                    if (tb.beanProducer() != void.class) {
+                        selected.add(tb.beanProducer());
+                    }
+                }
+            }
+
+            // Recurse into meta-annotations (skip JDK/CDI annotations)
+            if (!visited.contains(annType)
+                    && !annType.getName().startsWith("java.")
+                    && !annType.getName().startsWith("jakarta.")) {
+                visited.add(annType);
+                collectTestBeans(annType.getAnnotations(), selected, visited);
+            }
+        }
+    }
+
+    /**
+     * Returns {@code true} for types that must never be vetoed:
+     * CDI internals, vendor types, JDK, and this extension's own types.
+     */
+    private static boolean isInternalType(Class<?> clazz) {
+        String name = clazz.getName();
+        return name.startsWith("java.")
+                || name.startsWith("javax.")
+                || name.startsWith("jakarta.")
+                || name.startsWith("org.jboss.weld.")
+                || name.startsWith("org.apache.webbeans.")
+                || name.startsWith("org.apache.deltaspike.")
+                || name.startsWith("org.os890.cdi.addon.dynamictestbean.internal.");
+    }
+
+    /**
+     * Returns {@code true} if the class has any CDI scope annotation,
+     * using {@link BeanManager#isScope(Class)} for detection.
+     */
+    private static boolean hasScopeAnnotation(Class<?> clazz, BeanManager bm) {
+        for (Annotation ann : clazz.getAnnotations()) {
+            if (bm.isScope(ann.annotationType())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Simple scope check for use before {@link BeanManager} is available.
+     * Checks for {@code @Scope} and {@code @NormalScope} meta-annotations.
+     */
+    private static boolean hasScopeAnnotation(Class<?> clazz) {
+        for (Annotation ann : clazz.getAnnotations()) {
+            Class<? extends Annotation> type = ann.annotationType();
+            if (type.isAnnotationPresent(Scope.class)
+                    || type.isAnnotationPresent(NormalScope.class)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -173,9 +302,8 @@ public class DynamicTestBeanExtension implements Extension {
             return;
         }
 
-        for (TestBean tb : activeTestClass.getAnnotationsByType(TestBean.class)) {
-            enableAlternative(tb.bean(), activeTestClass, atd);
-            enableAlternative(tb.beanProducer(), activeTestClass, atd);
+        for (Class<?> alternative : getSelectedAlternatives(activeTestClass)) {
+            enableAlternative(alternative, activeTestClass, atd);
         }
     }
 
@@ -186,6 +314,70 @@ public class DynamicTestBeanExtension implements Extension {
         atd.getAlternatives().add(alternative);
         LOG.info("[DynamicTestBean] Enabled @TestBean alternative: " + alternative.getName()
                 + " (declared on " + testClass.getSimpleName() + ")");
+    }
+
+    /**
+     * Scans the active test class for static fields annotated with
+     * {@code @TestBean} and registers each as a synthetic CDI bean
+     * using the field's current value. Qualifiers on the field are
+     * carried over to the bean.
+     */
+    private void registerInlineProducerFields(Class<?> testClass,
+                                              AfterBeanDiscovery abd,
+                                              BeanManager bm) {
+        for (Field field : testClass.getDeclaredFields()) {
+            if (!field.isAnnotationPresent(TestBean.class)) {
+                continue;
+            }
+            if (!Modifier.isStatic(field.getModifiers())) {
+                LOG.warning("[DynamicTestBean] @TestBean field must be static: "
+                        + testClass.getSimpleName() + "." + field.getName());
+                continue;
+            }
+
+            field.setAccessible(true);
+            Object value;
+            try {
+                value = field.get(null);
+            } catch (IllegalAccessException e) {
+                LOG.warning("[DynamicTestBean] Cannot read @TestBean field: "
+                        + testClass.getSimpleName() + "." + field.getName());
+                continue;
+            }
+            if (value == null) {
+                LOG.warning("[DynamicTestBean] @TestBean field is null: "
+                        + testClass.getSimpleName() + "." + field.getName());
+                continue;
+            }
+
+            Type fieldType = field.getGenericType();
+            Set<Annotation> qualifiers = new LinkedHashSet<>();
+            for (Annotation ann : field.getAnnotations()) {
+                if (bm.isQualifier(ann.annotationType())) {
+                    qualifiers.add(ann);
+                }
+            }
+            // Remove @TestBean itself from qualifiers (it's not a CDI qualifier)
+            qualifiers.removeIf(a -> a.annotationType() == TestBean.class);
+
+            if (qualifiers.isEmpty()) {
+                qualifiers.add(Default.Literal.INSTANCE);
+            }
+            qualifiers.add(Any.Literal.INSTANCE);
+
+            abd.addBean()
+                    .beanClass(field.getType())
+                    .addType(fieldType)
+                    .addType(Object.class)
+                    .qualifiers(qualifiers.toArray(new Annotation[0]))
+                    .scope(Singleton.class)
+                    .createWith(ctx -> value);
+
+            inlineProducerTypes.add(fieldType);
+            LOG.info("[DynamicTestBean] Registered inline @TestBean field: "
+                    + testClass.getSimpleName() + "." + field.getName()
+                    + " (type=" + field.getType().getSimpleName() + ")");
+        }
     }
 
     /**
@@ -248,6 +440,31 @@ public class DynamicTestBeanExtension implements Extension {
      * @param bm  the bean manager, used to check whether an injection point is satisfied
      */
     void registerMockBeans(@Observes @Priority(Integer.MAX_VALUE) AfterBeanDiscovery abd, BeanManager bm) {
+        // Register the test class as a @Singleton CDI bean if requested
+        Class<?> activeTestClass = DynamicTestBeanContext.getActiveTestClass();
+        if (activeTestClass != null && DynamicTestBeanContext.isAddTestClass()) {
+            abd.addBean()
+                    .beanClass(activeTestClass)
+                    .addType(activeTestClass)
+                    .addType(Object.class)
+                    .scope(Singleton.class)
+                    .createWith(ctx -> {
+                        try {
+                            return activeTestClass.getDeclaredConstructor().newInstance();
+                        } catch (Exception e) {
+                            throw new RuntimeException(
+                                    "Failed to create test class bean: " + activeTestClass.getName(), e);
+                        }
+                    });
+            LOG.info("[DynamicTestBean] Registered test class as @Singleton bean: "
+                    + activeTestClass.getSimpleName());
+        }
+
+        // Register inline @TestBean producer fields from the active test class
+        if (activeTestClass != null) {
+            registerInlineProducerFields(activeTestClass, abd, bm);
+        }
+
         int mockCount = 0;
         for (InjectionPointKey key : collectedInjectionPoints) {
             if (isSatisfied(key, bm)) {
@@ -255,7 +472,8 @@ public class DynamicTestBeanExtension implements Extension {
             }
 
             Class<?> rawType = getRawType(key.type);
-            if (rawType == null || hasSyntheticBeanBinding(rawType)) {
+            if (rawType == null || hasSyntheticBeanBinding(rawType)
+                    || inlineProducerTypes.contains(key.type)) {
                 continue;
             }
 

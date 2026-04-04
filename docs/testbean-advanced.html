@@ -1,0 +1,294 @@
+<!--
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+
+      http://www.apache.org/licenses/LICENSE-2.0
+
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Advanced @TestBean Features &mdash; Injection, Inline Producers, Whitelist Mode, Meta-Annotations</title>
+    <style>
+        :root {
+            --bg: #0f1117; --surface: #161b22; --border: #30363d;
+            --text: #e6edf3; --text-muted: #8b949e;
+            --accent: #58a6ff; --accent-hover: #79c0ff;
+            --green: #3fb950; --orange: #d29922;
+            --code-bg: #1c2128; --code-border: #262c36;
+            --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+            --font-mono: 'JetBrains Mono', 'Fira Code', Consolas, monospace;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html { scroll-behavior: smooth; }
+        body { font-family: var(--font-sans); background: var(--bg); color: var(--text); line-height: 1.7; font-size: 17px; }
+        .hero { background: linear-gradient(135deg,#0d1117,#161b22 50%,#1a1f2b); border-bottom: 1px solid var(--border); padding: 5rem 2rem 4rem; text-align: center; }
+        .hero h1 { font-size: clamp(2rem,5vw,3rem); font-weight: 800; letter-spacing: -0.03em; line-height: 1.2; margin-bottom: 1.2rem; }
+        .hero h1 span { color: var(--accent); }
+        .hero .subtitle { font-size: 1.15rem; color: var(--text-muted); max-width: 640px; margin: 0 auto; }
+        .content { max-width: 820px; margin: 0 auto; padding: 3rem 2rem 5rem; }
+        h2 { font-size: 1.8rem; font-weight: 700; letter-spacing: -0.02em; margin: 3.5rem 0 1rem; padding-bottom: 0.5rem; border-bottom: 1px solid var(--border); }
+        h3 { font-size: 1.25rem; font-weight: 600; margin: 2rem 0 0.8rem; color: var(--accent); }
+        p { margin-bottom: 1rem; }
+        a { color: var(--accent); text-decoration: none; } a:hover { color: var(--accent-hover); text-decoration: underline; }
+        strong { color: #f0f6fc; }
+        pre { background: var(--code-bg); border: 1px solid var(--code-border); border-radius: 8px; padding: 1.2rem 1.4rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.88rem; line-height: 1.6; }
+        code { font-family: var(--font-mono); }
+        p code, li code, td code { background: var(--code-bg); border: 1px solid var(--code-border); border-radius: 4px; padding: 0.15em 0.4em; font-size: 0.9em; }
+        .kw { color: #ff7b72; } .ty { color: #79c0ff; } .fn { color: #d2a8ff; } .st { color: #a5d6ff; } .cm { color: #8b949e; font-style: italic; } .an { color: #ffa657; }
+        ul, ol { margin: 0.5rem 0 1.5rem 1.5rem; } li { margin-bottom: 0.4rem; color: var(--text-muted); } li strong { color: var(--text); }
+        .callout { background: var(--surface); border: 1px solid var(--border); border-left: 4px solid var(--accent); border-radius: 8px; padding: 1rem 1.4rem; margin: 1.5rem 0; font-size: 0.95rem; color: var(--text-muted); }
+        .callout strong { color: var(--accent); }
+        table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.95rem; }
+        th { text-align: left; padding: 0.7rem 1rem; background: var(--surface); border: 1px solid var(--border); font-weight: 600; }
+        td { padding: 0.6rem 1rem; border: 1px solid var(--border); color: var(--text-muted); }
+        footer { text-align: center; padding: 2rem; color: var(--text-muted); font-size: 0.85rem; border-top: 1px solid var(--border); }
+        footer a { color: var(--accent); }
+        .topnav {
+            position: sticky; top: 0; z-index: 100;
+            background: var(--surface); border-bottom: 1px solid var(--border);
+            padding: 0.6rem 2rem; display: flex; gap: 1.5rem;
+            justify-content: center; flex-wrap: wrap; font-size: 0.88rem;
+        }
+        .topnav a { color: var(--text-muted); text-decoration: none; padding: 0.2rem 0; }
+        .topnav a:hover { color: var(--accent); }
+        .topnav a.active { color: var(--accent); border-bottom: 2px solid var(--accent); }
+        @media (max-width: 600px) { .hero { padding: 3rem 1.2rem 2.5rem; } .content { padding: 2rem 1.2rem 3rem; } pre { font-size: 0.8rem; padding: 1rem; } .topnav { padding: 0.5rem 1rem; gap: 1rem; font-size: 0.8rem; } }
+    </style>
+</head>
+<body>
+
+<nav class="topnav">
+    <a href="index.html">Auto-Mocking</a>
+    <a href="testbean.html">@TestBean Basics</a>
+    <a href="testbean-advanced.html" class="active">Advanced Features</a>
+    <a href="https://github.com/os890/dynamic-cdi-test-bean-addon">GitHub</a>
+</nav>
+
+<section class="hero">
+    <h1>
+        <span>Advanced @TestBean</span><br>
+        Injection, Inline Producers, Whitelist Mode, Meta-Annotations
+    </h1>
+    <p class="subtitle">
+        Beyond <a href="testbean.html">basic @TestBean</a> &mdash; four features
+        that make CDI testing even more concise and composable.
+    </p>
+</section>
+
+<main class="content">
+
+<p>
+    This post builds on the <a href="index.html">auto-mocking</a> and
+    <a href="testbean.html">basic @TestBean</a> features. Make sure you're
+    familiar with those first.
+</p>
+
+<!-- ======== @Inject into test class ======== -->
+<h2>1. @Inject Into the Test Class</h2>
+
+<p>
+    By default, <code>@EnableTestBeans</code> registers the test class as a
+    <code>@Singleton</code> CDI bean and injects <code>@Inject</code> fields
+    after container bootstrap. No <code>container.select()</code> needed.
+</p>
+
+<pre><code><span class="an">@EnableTestBeans</span>
+<span class="an">@TestBean</span>(bean = <span class="ty">CustomGreeting</span>.<span class="kw">class</span>)
+<span class="kw">class</span> <span class="ty">MyTest</span> {
+
+    <span class="an">@Inject</span>
+    <span class="ty">GreetingConsumer</span> consumer;  <span class="cm">// injected by CDI</span>
+
+    <span class="kw">static</span> <span class="ty">SeContainer</span> container;
+
+    <span class="an">@BeforeAll</span>
+    <span class="kw">static void</span> <span class="fn">boot</span>() {
+        container = <span class="ty">SeContainerInitializer</span>.<span class="fn">newInstance</span>().<span class="fn">initialize</span>();
+    }
+
+    <span class="an">@Test</span>
+    <span class="kw">void</span> <span class="fn">test</span>() {
+        <span class="fn">assertEquals</span>(<span class="st">"Hello, world!"</span>, consumer.<span class="fn">getGreeting</span>().<span class="fn">greet</span>(<span class="st">"world"</span>));
+    }
+}</code></pre>
+
+<p>
+    Disable with <code>@EnableTestBeans(addTestClass = false)</code> if you
+    don't want the test class to be a CDI bean.
+</p>
+
+<!-- ======== Inline producer fields ======== -->
+<h2>2. Inline @Produces @TestBean Fields</h2>
+
+<p>
+    The simplest way to provide a pre-configured mock: declare a
+    <code>static</code> field with <code>@Produces @TestBean</code>.
+    The extension reads the field value and registers it as a
+    <code>@Singleton</code> CDI bean. Qualifiers on the field are carried over.
+</p>
+
+<pre><code><span class="an">@EnableTestBeans</span>
+<span class="kw">class</span> <span class="ty">MyTest</span> {
+
+    <span class="an">@Produces</span> <span class="an">@TestBean</span>
+    <span class="kw">private static</span> <span class="ty">Greeting</span> greeting = <span class="ty">Mockito</span>.<span class="fn">mock</span>(<span class="ty">Greeting</span>.<span class="kw">class</span>);
+
+    <span class="an">@Inject</span>
+    <span class="ty">GreetingConsumer</span> consumer;
+
+    <span class="cm">// ... boot container in @BeforeAll ...</span>
+
+    <span class="an">@Test</span>
+    <span class="kw">void</span> <span class="fn">test</span>() {
+        <span class="ty">Mockito</span>.<span class="fn">when</span>(greeting.<span class="fn">greet</span>(<span class="st">"world"</span>)).<span class="fn">thenReturn</span>(<span class="st">"Stubbed!"</span>);
+        <span class="fn">assertEquals</span>(<span class="st">"Stubbed!"</span>, consumer.<span class="fn">getGreeting</span>().<span class="fn">greet</span>(<span class="st">"world"</span>));
+    }
+}</code></pre>
+
+<div class="callout">
+    <strong>Isolation guaranteed.</strong> Two test classes can declare inline
+    fields for the same type with different values &mdash; each test class
+    only sees its own field. No conflicts, no <code>reuseForks</code> needed.
+</div>
+
+<!-- ======== Whitelist mode ======== -->
+<h2>3. Whitelist Mode</h2>
+
+<p>
+    <code>limitToTestBeans = true</code> vetoes <strong>all</strong>
+    application beans except those explicitly declared via
+    <code>@TestBean</code>. CDI internals (Weld, OWB, DeltaSpike) are
+    preserved. No auto-mocking occurs.
+</p>
+
+<pre><code><span class="an">@EnableTestBeans</span>(limitToTestBeans = <span class="kw">true</span>)
+<span class="an">@TestBean</span>(bean = <span class="ty">CustomGreeting</span>.<span class="kw">class</span>)
+<span class="kw">class</span> <span class="ty">MyTest</span> {
+    <span class="cm">// Only CustomGreeting is active.</span>
+    <span class="cm">// All other application beans are vetoed.</span>
+    <span class="cm">// No Mockito mocks are created.</span>
+}</code></pre>
+
+<p>
+    This is useful for true unit tests where you want complete control
+    over which beans exist. If a <code>@TestBean</code> references a class
+    that has no <code>@TestBean</code> on this test, the injection point
+    is unsatisfied &mdash; the container tells you exactly what's missing.
+</p>
+
+<!-- ======== Composable meta-annotations ======== -->
+<h2>4. Composable Meta-Annotations</h2>
+
+<p>
+    Bundle <code>@TestBean</code> declarations into reusable annotations.
+    Meta-annotations can nest to any depth, and duplicate bean references
+    across levels are deduplicated automatically.
+</p>
+
+<h3>Level 1: single concern</h3>
+
+<pre><code><span class="an">@TestBean</span>(bean = <span class="ty">CustomGreeting</span>.<span class="kw">class</span>)
+<span class="an">@Retention</span>(<span class="ty">RUNTIME</span>) <span class="an">@Target</span>(<span class="ty">TYPE</span>)
+<span class="kw">public</span> <span class="kw">@interface</span> <span class="ty">GreetingMocks</span> {}</code></pre>
+
+<h3>Level 2: compose level-1 annotations</h3>
+
+<pre><code><span class="an">@GreetingMocks</span>
+<span class="an">@NotificationMocks</span>
+<span class="an">@Retention</span>(<span class="ty">RUNTIME</span>) <span class="an">@Target</span>(<span class="ty">TYPE</span>)
+<span class="kw">public</span> <span class="kw">@interface</span> <span class="ty">StandardMocks</span> {}</code></pre>
+
+<h3>Level 3: compose level-2 + add more</h3>
+
+<pre><code><span class="an">@StandardMocks</span>
+<span class="an">@TestBean</span>(beanProducer = <span class="ty">AuditProducers</span>.<span class="kw">class</span>)
+<span class="an">@TestBean</span>(bean = <span class="ty">CustomGreeting</span>.<span class="kw">class</span>)  <span class="cm">// redundant &mdash; already in @GreetingMocks</span>
+<span class="an">@Retention</span>(<span class="ty">RUNTIME</span>) <span class="an">@Target</span>(<span class="ty">TYPE</span>)
+<span class="kw">public</span> <span class="kw">@interface</span> <span class="ty">FullTestSetup</span> {}</code></pre>
+
+<h3>Usage</h3>
+
+<pre><code><span class="an">@EnableTestBeans</span>
+<span class="an">@FullTestSetup</span>
+<span class="kw">class</span> <span class="ty">MyTest</span> {
+    <span class="cm">// Gets: CustomGreeting + CustomNotificationSender + AuditProducers</span>
+    <span class="cm">// Duplicate CustomGreeting is silently deduplicated</span>
+}</code></pre>
+
+<div class="callout">
+    <strong>Deduplication is automatic.</strong> The same bean class can appear
+    in multiple <code>@TestBean</code> annotations across any number of
+    meta-annotation levels. The extension collects them into a
+    <code>Set</code> &mdash; duplicates are a no-op, not an error.
+</div>
+
+<!-- ======== Summary table ======== -->
+<h2>Feature Summary</h2>
+
+<table>
+    <thead>
+        <tr><th>Feature</th><th>Annotation</th><th>Default</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td>Inject <code>@Inject</code> fields on test class</td>
+            <td><code>@EnableTestBeans</code></td>
+            <td>On (<code>addTestClass = true</code>)</td>
+        </tr>
+        <tr>
+            <td>Activate <code>@Alternative</code> bean</td>
+            <td><code>@TestBean(bean = ...)</code></td>
+            <td>&mdash;</td>
+        </tr>
+        <tr>
+            <td>Activate <code>@Alternative</code> producer</td>
+            <td><code>@TestBean(beanProducer = ...)</code></td>
+            <td>&mdash;</td>
+        </tr>
+        <tr>
+            <td>Inline producer field</td>
+            <td><code>@Produces @TestBean</code> on static field</td>
+            <td>&mdash;</td>
+        </tr>
+        <tr>
+            <td>Whitelist mode (veto all others)</td>
+            <td><code>@EnableTestBeans(limitToTestBeans = true)</code></td>
+            <td>Off</td>
+        </tr>
+        <tr>
+            <td>Composable meta-annotations</td>
+            <td><code>@TestBean</code> on custom annotations</td>
+            <td>Recursive, deduplicated</td>
+        </tr>
+    </tbody>
+</table>
+
+</main>
+
+<footer>
+    <p>
+        <a href="https://github.com/os890/dynamic-cdi-test-bean-addon">Source on GitHub</a>
+        &nbsp;&middot;&nbsp;
+        <a href="https://www.apache.org/licenses/LICENSE-2.0">Apache License 2.0</a>
+    </p>
+    <p>
+        This is the first CDI extension from
+        <a href="https://github.com/os890">os890</a> created entirely in an
+        agentic AI workflow (Claude, Anthropic).
+    </p>
+</footer>
+
+</body>
+</html>

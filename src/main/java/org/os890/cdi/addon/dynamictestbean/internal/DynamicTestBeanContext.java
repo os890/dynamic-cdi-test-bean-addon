@@ -18,41 +18,55 @@
 package org.os890.cdi.addon.dynamictestbean.internal;
 
 /**
- * Holds the currently active test class for the
- * {@link org.os890.cdi.addon.dynamictestbean.internal.DynamicTestBeanExtension}.
+ * Holds the currently active test class and its configuration for the
+ * CDI extension and JUnit extension.
  *
- * <p>When set, the CDI extension only processes {@link TestBean}
- * annotations from this specific class, preventing conflicts between
- * test classes that activate different {@code @Alternative} beans for
- * the same type.</p>
- *
- * <p>This is set automatically by {@link DynamicTestBeanJUnitExtension}.
- * Manual usage is not required.</p>
+ * <p>Set automatically by {@link DynamicTestBeanJUnitExtension}.
+ * Internal — not part of the public API.</p>
  */
 public final class DynamicTestBeanContext {
 
     private static volatile Class<?> activeTestClass;
+    private static volatile boolean addTestClass = true;
+    private static volatile boolean limitToTestBeans;
 
     private DynamicTestBeanContext() {
     }
 
-    /**
-     * Sets the active test class. Only {@link TestBean} annotations
-     * on this class will be processed by the CDI extension.
-     *
-     * @param testClass the active test class, or {@code null} to clear
-     */
+    /** Sets the active test class. */
     public static void setActiveTestClass(Class<?> testClass) {
         activeTestClass = testClass;
     }
 
-    /**
-     * Returns the currently active test class, or {@code null} if none
-     * is set (in which case all {@link TestBean} annotations are processed).
-     *
-     * @return the active test class
-     */
+    /** Returns the active test class, or {@code null} if none. */
     public static Class<?> getActiveTestClass() {
         return activeTestClass;
+    }
+
+    /** Sets whether the test class should be added as a CDI bean. */
+    public static void setAddTestClass(boolean value) {
+        addTestClass = value;
+    }
+
+    /** Returns whether the test class should be added as a CDI bean. */
+    public static boolean isAddTestClass() {
+        return addTestClass;
+    }
+
+    /** Sets whether to veto all beans except those declared via @TestBean. */
+    public static void setLimitToTestBeans(boolean value) {
+        limitToTestBeans = value;
+    }
+
+    /** Returns whether whitelist mode is active. */
+    public static boolean isLimitToTestBeans() {
+        return limitToTestBeans;
+    }
+
+    /** Resets all state. */
+    public static void reset() {
+        activeTestClass = null;
+        addTestClass = true;
+        limitToTestBeans = false;
     }
 }
