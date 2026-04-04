@@ -21,14 +21,11 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import jakarta.enterprise.inject.se.SeContainer;
-import jakarta.enterprise.inject.se.SeContainerInitializer;
 import jakarta.enterprise.inject.spi.Bean;
+import jakarta.enterprise.inject.spi.CDI;
 
 import java.util.Set;
 
-import org.junit.jupiter.api.AfterAll;
-import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.os890.cdi.addon.dynamictestbean.EnableTestBeans;
@@ -47,24 +44,10 @@ import org.os890.cdi.addon.dynamictestbean.usecase.SelfContainedService;
 @TestBean(bean = CustomGreeting.class)
 class WhitelistModeTest {
 
-    private static SeContainer container;
-
-    @BeforeAll
-    static void boot() {
-        container = SeContainerInitializer.newInstance().initialize();
-    }
-
-    @AfterAll
-    static void shutdown() {
-        if (container != null && container.isRunning()) {
-            container.close();
-        }
-    }
-
     @Test
     @DisplayName("Whitelisted @TestBean alternative is available")
     void whitelistedBeanIsAvailable() {
-        Set<Bean<?>> beans = container.getBeanManager().getBeans(Greeting.class);
+        Set<Bean<?>> beans = CDI.current().getBeanManager().getBeans(Greeting.class);
         assertNotNull(beans);
         assertEquals(1, beans.size(), "Only CustomGreeting should satisfy Greeting");
     }
@@ -73,12 +56,12 @@ class WhitelistModeTest {
     @DisplayName("Non-whitelisted beans are vetoed")
     void nonWhitelistedBeansAreVetoed() {
         Set<Bean<?>> greetingConsumerBeans =
-                container.getBeanManager().getBeans(GreetingConsumer.class);
+                CDI.current().getBeanManager().getBeans(GreetingConsumer.class);
         assertTrue(greetingConsumerBeans.isEmpty(),
                 "GreetingConsumer should be vetoed in whitelist mode");
 
         Set<Bean<?>> selfContainedBeans =
-                container.getBeanManager().getBeans(SelfContainedService.class);
+                CDI.current().getBeanManager().getBeans(SelfContainedService.class);
         assertTrue(selfContainedBeans.isEmpty(),
                 "SelfContainedService should be vetoed in whitelist mode");
     }

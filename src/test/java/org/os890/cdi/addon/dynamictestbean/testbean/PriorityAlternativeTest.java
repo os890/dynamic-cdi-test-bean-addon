@@ -18,29 +18,31 @@
 package org.os890.cdi.addon.dynamictestbean.testbean;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 
-import jakarta.enterprise.inject.spi.CDI;
+import jakarta.inject.Inject;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.os890.cdi.addon.dynamictestbean.EnableTestBeans;
-import org.os890.cdi.addon.dynamictestbean.TestBean;
-import org.os890.cdi.addon.dynamictestbean.usecase.GreetingConsumer;
+import org.os890.cdi.addon.dynamictestbean.usecase.StatusConsumer;
 
 /**
- * Isolation test: activates {@link FormalGreeting} for {@link Greeting}.
- * Runs alongside {@link CustomGreetingIsolationTest} which activates
- * {@link CustomGreeting} for the same type — proving that the JUnit
- * extension correctly scopes alternatives per test class.
+ * Tests that {@code @Alternative @Priority} beans are NOT vetoed
+ * by the extension. They work as normal CDI alternatives without
+ * needing {@code @TestBean}.
  */
 @EnableTestBeans
-@TestBean(bean = FormalGreeting.class)
-class FormalGreetingIsolationTest {
+class PriorityAlternativeTest {
+
+    @Inject
+    StatusConsumer consumer;
 
     @Test
-    @DisplayName("FormalGreeting is active — returns 'Good day, ...'")
-    void formalGreetingIsActive() {
-        GreetingConsumer consumer = CDI.current().select(GreetingConsumer.class).get();
-        assertEquals("Good day, world.", consumer.getGreeting().greet("world"));
+    @DisplayName("@Alternative @Priority bean is not vetoed — works without @TestBean")
+    void priorityAlternativeIsNotVetoed() {
+        assertNotNull(consumer);
+        assertNotNull(consumer.getStatusService());
+        assertEquals("OK", consumer.getStatusService().getStatus());
     }
 }

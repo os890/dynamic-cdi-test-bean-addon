@@ -29,6 +29,7 @@ import jakarta.enterprise.inject.Default;
 import jakarta.enterprise.context.Dependent;
 import jakarta.enterprise.context.NormalScope;
 import jakarta.enterprise.inject.Alternative;
+import jakarta.enterprise.inject.Typed;
 import jakarta.inject.Scope;
 import jakarta.enterprise.inject.spi.AfterBeanDiscovery;
 import jakarta.enterprise.inject.spi.AfterTypeDiscovery;
@@ -172,20 +173,34 @@ public class DynamicTestBeanExtension implements Extension {
         }
 
         // Normal mode (or selected bean in whitelist mode):
-        // handle @Alternative veto/scope logic
+        // handle @Alternative veto/scope logic.
         if (javaClass.isAnnotationPresent(Alternative.class)) {
             if (activeTestClass == null) {
-                pat.veto();
+                // No @EnableTestBeans — veto alternatives without @Priority
+                // (they'd be inactive anyway, but their producers could conflict).
+                // @Alternative @Priority beans are CDI-managed, leave them.
+                if (!javaClass.isAnnotationPresent(Priority.class)) {
+                    pat.veto();
+                }
                 return;
             }
-            if (!selected.contains(javaClass)) {
-                LOG.info("[DynamicTestBean] Vetoing unselected @Alternative: " + javaClass.getName());
-                pat.veto();
+
+            if (selected.contains(javaClass)) {
+                // This is a @TestBean-selected alternative — add scope if missing.
+                if (!hasScopeAnnotation(javaClass, bm)) {
+                    pat.configureAnnotatedType().add(Dependent.Literal.INSTANCE);
+                    LOG.info("[DynamicTestBean] Added @Dependent scope to: " + javaClass.getName());
+                }
                 return;
             }
-            if (!hasScopeAnnotation(javaClass, bm)) {
-                pat.configureAnnotatedType().add(Dependent.Literal.INSTANCE);
-                LOG.info("[DynamicTestBean] Added @Dependent scope to: " + javaClass.getName());
+
+            // Not selected — veto only if its bean types clash with
+            // any @TestBean-declared alternative's bean types.
+            // @Typed is respected on both sides.
+            Set<Type> candidateTypes = resolveBeanTypes(javaClass);
+            if (hasTypeClashWithSelected(candidateTypes, selected)) {
+                LOG.info("[DynamicTestBean] Vetoing @Alternative (type clash): " + javaClass.getName());
+                pat.veto();
             }
         }
     }
@@ -264,6 +279,51 @@ public class DynamicTestBeanExtension implements Extension {
         for (Annotation ann : clazz.getAnnotations()) {
             if (bm.isScope(ann.annotationType())) {
                 return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Resolves the CDI bean types for a class, respecting {@link Typed}.
+     * If {@code @Typed} is present, only the listed types + {@code Object}
+     * are returned. Otherwise: the class, all interfaces, all superclasses,
+     * and {@code Object}.
+     */
+    private static Set<Type> resolveBeanTypes(Class<?> clazz) {
+        Typed typed = clazz.getAnnotation(Typed.class);
+        Set<Type> types = new LinkedHashSet<>();
+        if (typed != null) {
+            for (Class<?> t : typed.value()) {
+                types.add(t);
+            }
+        } else {
+            types.add(clazz);
+            for (Type iface : clazz.getGenericInterfaces()) {
+                types.add(iface);
+            }
+            Class<?> superClass = clazz.getSuperclass();
+            while (superClass != null && superClass != Object.class) {
+                types.add(superClass);
+                superClass = superClass.getSuperclass();
+            }
+        }
+        types.add(Object.class);
+        return types;
+    }
+
+    /**
+     * Returns {@code true} if the candidate's bean types overlap with the
+     * bean types of any class in the selected {@code @TestBean} set.
+     * {@code Object.class} is excluded from the comparison.
+     */
+    private static boolean hasTypeClashWithSelected(Set<Type> candidateTypes, Set<Class<?>> selected) {
+        for (Class<?> selectedClass : selected) {
+            Set<Type> selectedTypes = resolveBeanTypes(selectedClass);
+            for (Type t : candidateTypes) {
+                if (t != Object.class && selectedTypes.contains(t)) {
+                    return true;
+                }
             }
         }
         return false;

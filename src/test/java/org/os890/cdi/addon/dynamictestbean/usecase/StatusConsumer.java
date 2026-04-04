@@ -15,33 +15,22 @@
  * limitations under the License.
  */
 
-package org.os890.cdi.addon.dynamictestbean.testbean;
+package org.os890.cdi.addon.dynamictestbean.usecase;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-
+import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
-import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Test;
-import org.os890.cdi.addon.dynamictestbean.EnableTestBeans;
-import org.os890.cdi.addon.dynamictestbean.testbean.meta.GreetingMocks;
-import org.os890.cdi.addon.dynamictestbean.usecase.GreetingConsumer;
-
 /**
- * Tests a single-level meta-annotation ({@link GreetingMocks}).
+ * Bean that injects {@link StatusService} to test that
+ * {@code @Alternative @Priority} beans are not vetoed.
  */
-@EnableTestBeans
-@GreetingMocks
-class MetaAnnotationSimpleTest {
+@ApplicationScoped
+public class StatusConsumer {
 
     @Inject
-    GreetingConsumer consumer;
+    private StatusService statusService;
 
-    @Test
-    @DisplayName("Level 1 meta-annotation: @GreetingMocks activates CustomGreeting")
-    void level1MetaAnnotationWorks() {
-        assertNotNull(consumer);
-        assertEquals("Hello, world!", consumer.getGreeting().greet("world"));
+    public StatusService getStatusService() {
+        return statusService;
     }
 }

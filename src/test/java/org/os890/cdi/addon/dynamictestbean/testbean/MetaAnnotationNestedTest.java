@@ -21,13 +21,8 @@ import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
-import jakarta.enterprise.context.control.RequestContextController;
-import jakarta.enterprise.inject.se.SeContainer;
-import jakarta.enterprise.inject.se.SeContainerInitializer;
 import jakarta.inject.Inject;
 
-import org.junit.jupiter.api.AfterAll;
-import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.os890.cdi.addon.dynamictestbean.EnableTestBeans;
@@ -44,26 +39,6 @@ class MetaAnnotationNestedTest {
 
     @Inject
     GreetingConsumer consumer;
-
-    private static SeContainer container;
-    private static RequestContextController rc;
-
-    @BeforeAll
-    static void boot() {
-        container = SeContainerInitializer.newInstance().initialize();
-        rc = container.select(RequestContextController.class).get();
-        rc.activate();
-    }
-
-    @AfterAll
-    static void shutdown() {
-        if (rc != null) {
-            rc.deactivate();
-        }
-        if (container != null && container.isRunning()) {
-            container.close();
-        }
-    }
 
     @Test
     @DisplayName("Level 2: @StandardMocks activates CustomGreeting from @GreetingMocks")

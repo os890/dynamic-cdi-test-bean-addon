@@ -20,49 +20,52 @@ package org.os890.cdi.addon.dynamictestbean.testbean;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
-import jakarta.inject.Inject;
+import jakarta.enterprise.context.control.RequestContextController;
+import jakarta.enterprise.inject.se.SeContainer;
+import jakarta.enterprise.inject.se.SeContainerInitializer;
 
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.os890.cdi.addon.dynamictestbean.EnableTestBeans;
 import org.os890.cdi.addon.dynamictestbean.TestBean;
-import org.os890.cdi.addon.dynamictestbean.usecase.Greeting;
 import org.os890.cdi.addon.dynamictestbean.usecase.GreetingConsumer;
-import org.os890.cdi.addon.dynamictestbean.usecase.SelfContainedService;
 
 /**
- * Tests that {@code @Inject} fields on the test class are injected
- * by the JUnit extension after container bootstrap.
+ * Tests {@code manageContainer = false} — the extension does NOT
+ * start/stop the container or request scope. The test manages
+ * the container lifecycle manually.
  */
-@EnableTestBeans
+@EnableTestBeans(manageContainer = false)
 @TestBean(bean = CustomGreeting.class)
-class InjectIntoTestClassTest {
+class ManualContainerTest {
 
-    @Inject
-    GreetingConsumer greetingConsumer;
+    private static SeContainer container;
+    private static RequestContextController rc;
 
-    @Inject
-    SelfContainedService selfContainedService;
+    @BeforeAll
+    static void boot() {
+        container = SeContainerInitializer.newInstance().initialize();
+        rc = container.select(RequestContextController.class).get();
+        rc.activate();
+    }
 
-    @Test
-    @DisplayName("@Inject fields on test class are injected by the extension")
-    void injectFieldsAreInjected() {
-        assertNotNull(greetingConsumer, "GreetingConsumer should be injected");
-        assertNotNull(selfContainedService, "SelfContainedService should be injected");
+    @AfterAll
+    static void shutdown() {
+        if (rc != null) {
+            rc.deactivate();
+        }
+        if (container != null && container.isRunning()) {
+            container.close();
+        }
     }
 
     @Test
-    @DisplayName("Injected beans are functional")
-    void injectedBeansAreFunctional() {
-        assertEquals("pong", selfContainedService.ping());
-    }
-
-    @Test
-    @DisplayName("@TestBean alternative is visible through injected beans")
-    void testBeanAlternativeVisibleThroughInjection() {
-        Greeting greeting = greetingConsumer.getGreeting();
-        assertNotNull(greeting);
-        assertEquals("Hello, world!", greeting.greet("world"),
-                "Should use CustomGreeting via @TestBean");
+    @DisplayName("Manual container management with manageContainer=false")
+    void manualContainerWorks() {
+        GreetingConsumer consumer = container.select(GreetingConsumer.class).get();
+        assertNotNull(consumer);
+        assertEquals("Hello, world!", consumer.getGreeting().greet("world"));
     }
 }

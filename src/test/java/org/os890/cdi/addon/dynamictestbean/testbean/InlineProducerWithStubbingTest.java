@@ -18,29 +18,47 @@
 package org.os890.cdi.addon.dynamictestbean.testbean;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
-import jakarta.enterprise.inject.spi.CDI;
+import jakarta.enterprise.inject.Produces;
+import jakarta.inject.Inject;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
 import org.os890.cdi.addon.dynamictestbean.EnableTestBeans;
 import org.os890.cdi.addon.dynamictestbean.TestBean;
+import org.os890.cdi.addon.dynamictestbean.usecase.Greeting;
 import org.os890.cdi.addon.dynamictestbean.usecase.GreetingConsumer;
 
 /**
- * Isolation test: activates {@link FormalGreeting} for {@link Greeting}.
- * Runs alongside {@link CustomGreetingIsolationTest} which activates
- * {@link CustomGreeting} for the same type — proving that the JUnit
- * extension correctly scopes alternatives per test class.
+ * Tests the inline {@code @Produces @TestBean} field pattern with
+ * Mockito stubbing applied in the test method.
  */
 @EnableTestBeans
-@TestBean(bean = FormalGreeting.class)
-class FormalGreetingIsolationTest {
+class InlineProducerWithStubbingTest {
+
+    @Produces
+    @TestBean
+    private static Greeting greeting = Mockito.mock(Greeting.class);
+
+    @Inject
+    GreetingConsumer consumer;
 
     @Test
-    @DisplayName("FormalGreeting is active — returns 'Good day, ...'")
-    void formalGreetingIsActive() {
-        GreetingConsumer consumer = CDI.current().select(GreetingConsumer.class).get();
-        assertEquals("Good day, world.", consumer.getGreeting().greet("world"));
+    @DisplayName("Stubbed Mockito mock is injected as CDI bean")
+    void stubbedMockIsInjected() {
+        Mockito.when(greeting.greet("world")).thenReturn("Stubbed!");
+
+        assertEquals("Stubbed!", consumer.getGreeting().greet("world"));
+        assertNull(consumer.getGreeting().greet("other"));
+    }
+
+    @Test
+    @DisplayName("Mockito verify works on the injected mock")
+    void verifyWorksOnInjectedMock() {
+        consumer.getGreeting().greet("test");
+
+        Mockito.verify(greeting).greet("test");
     }
 }

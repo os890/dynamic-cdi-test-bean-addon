@@ -21,12 +21,8 @@ import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
-import jakarta.enterprise.context.control.RequestContextController;
-import jakarta.enterprise.inject.se.SeContainer;
-import jakarta.enterprise.inject.se.SeContainerInitializer;
+import jakarta.enterprise.inject.spi.CDI;
 
-import org.junit.jupiter.api.AfterAll;
-import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.os890.cdi.addon.dynamictestbean.EnableTestBeans;
@@ -47,30 +43,10 @@ import org.os890.cdi.addon.dynamictestbean.usecase.NotificationSender;
 @TestBean(bean = CustomNotificationSender.class)
 class MultiTestBeanTest {
 
-    private static SeContainer container;
-    private static RequestContextController requestContext;
-
-    @BeforeAll
-    static void bootContainer() {
-        container = SeContainerInitializer.newInstance().initialize();
-        requestContext = container.select(RequestContextController.class).get();
-        requestContext.activate();
-    }
-
-    @AfterAll
-    static void shutdownContainer() {
-        if (requestContext != null) {
-            requestContext.deactivate();
-        }
-        if (container != null && container.isRunning()) {
-            container.close();
-        }
-    }
-
     @Test
     @DisplayName("Both @Alternative beans are activated simultaneously")
     void bothAlternativesAreActive() {
-        GreetingConsumer consumer = container.select(GreetingConsumer.class).get();
+        GreetingConsumer consumer = CDI.current().select(GreetingConsumer.class).get();
 
         assertNotNull(consumer.getGreeting());
         assertNotNull(consumer.getNotificationSender());
@@ -79,7 +55,7 @@ class MultiTestBeanTest {
     @Test
     @DisplayName("CustomGreeting replacement returns real values")
     void greetingReplacementReturnsRealValues() {
-        GreetingConsumer consumer = container.select(GreetingConsumer.class).get();
+        GreetingConsumer consumer = CDI.current().select(GreetingConsumer.class).get();
 
         assertEquals("Hello, world!", consumer.getGreeting().greet("world"));
     }
@@ -87,7 +63,7 @@ class MultiTestBeanTest {
     @Test
     @DisplayName("CustomNotificationSender replacement records messages")
     void notificationReplacementRecordsMessages() {
-        GreetingConsumer consumer = container.select(GreetingConsumer.class).get();
+        GreetingConsumer consumer = CDI.current().select(GreetingConsumer.class).get();
         NotificationSender sender = consumer.getNotificationSender();
 
         // Real NotificationSender throws — custom replacement records

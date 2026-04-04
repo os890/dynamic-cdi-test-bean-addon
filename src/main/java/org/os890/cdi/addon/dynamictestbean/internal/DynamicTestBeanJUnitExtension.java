@@ -17,59 +17,88 @@
 
 package org.os890.cdi.addon.dynamictestbean.internal;
 
+import jakarta.enterprise.context.control.RequestContextController;
 import jakarta.enterprise.context.spi.CreationalContext;
+import jakarta.enterprise.inject.se.SeContainer;
+import jakarta.enterprise.inject.se.SeContainerInitializer;
 import jakarta.enterprise.inject.spi.AnnotatedType;
 import jakarta.enterprise.inject.spi.BeanManager;
 import jakarta.enterprise.inject.spi.CDI;
 import jakarta.enterprise.inject.spi.InjectionTarget;
 
 import org.junit.jupiter.api.extension.AfterAllCallback;
+import org.junit.jupiter.api.extension.AfterEachCallback;
 import org.junit.jupiter.api.extension.BeforeAllCallback;
+import org.junit.jupiter.api.extension.BeforeEachCallback;
 import org.junit.jupiter.api.extension.ExtensionContext;
 import org.junit.jupiter.api.extension.TestInstancePostProcessor;
 import org.os890.cdi.addon.dynamictestbean.EnableTestBeans;
 
 /**
- * Internal JUnit extension that sets the active test class before
- * container bootstrap and injects CDI beans into the test instance.
+ * Internal JUnit extension that manages the CDI SE container lifecycle
+ * and injects CDI beans into the test instance.
  *
  * <p><strong>This is an internal class.</strong> Users should annotate
  * their test class with
  * {@link EnableTestBeans @EnableTestBeans}
  * which embeds this extension via {@code @ExtendWith}.</p>
+ *
+ * <p>When {@code manageContainer = true} (default):</p>
+ * <ul>
+ *   <li>{@code beforeAll} — sets active test class, starts the container</li>
+ *   <li>{@code beforeEach} — activates the request scope</li>
+ *   <li>{@code postProcessTestInstance} — injects {@code @Inject} fields</li>
+ *   <li>{@code afterEach} — deactivates the request scope</li>
+ *   <li>{@code afterAll} — shuts down the container, resets state</li>
+ * </ul>
  */
 public class DynamicTestBeanJUnitExtension
-        implements BeforeAllCallback, AfterAllCallback, TestInstancePostProcessor {
+        implements BeforeAllCallback, AfterAllCallback,
+                   BeforeEachCallback, AfterEachCallback,
+                   TestInstancePostProcessor {
+
+    private static final ExtensionContext.Namespace NS =
+            ExtensionContext.Namespace.create(DynamicTestBeanJUnitExtension.class);
 
     @Override
     public void beforeAll(ExtensionContext context) {
         context.getTestClass().ifPresent(testClass -> {
-            DynamicTestBeanContext.setActiveTestClass(testClass);
             EnableTestBeans config = testClass.getAnnotation(EnableTestBeans.class);
+            DynamicTestBeanContext.setActiveTestClass(testClass);
             if (config != null) {
                 DynamicTestBeanContext.setAddTestClass(config.addTestClass());
                 DynamicTestBeanContext.setLimitToTestBeans(config.limitToTestBeans());
+                DynamicTestBeanContext.setManageContainer(config.manageContainer());
+            }
+
+            if (DynamicTestBeanContext.isManageContainer()) {
+                SeContainer container = SeContainerInitializer.newInstance().initialize();
+                context.getStore(NS).put("container", container);
             }
         });
     }
 
     @Override
-    public void afterAll(ExtensionContext context) {
-        DynamicTestBeanContext.reset();
+    public void beforeEach(ExtensionContext context) {
+        if (!DynamicTestBeanContext.isManageContainer()) {
+            return;
+        }
+        try {
+            RequestContextController rc = CDI.current()
+                    .select(RequestContextController.class).get();
+            rc.activate();
+            context.getStore(NS).put("requestContext", rc);
+        } catch (IllegalStateException e) {
+            // No container running
+        }
     }
 
-    /**
-     * Injects CDI beans into {@code @Inject} fields on the test instance.
-     * Only runs if {@code addTestClass = true} (default) and a CDI
-     * container is running.
-     */
     @Override
     @SuppressWarnings("unchecked")
     public void postProcessTestInstance(Object testInstance, ExtensionContext context) {
         if (!DynamicTestBeanContext.isAddTestClass()) {
             return;
         }
-
         try {
             BeanManager bm = CDI.current().getBeanManager();
             Class<Object> testClass = (Class<Object>) testInstance.getClass();
@@ -81,5 +110,24 @@ public class DynamicTestBeanJUnitExtension
         } catch (IllegalStateException e) {
             // No CDI container running — skip injection
         }
+    }
+
+    @Override
+    public void afterEach(ExtensionContext context) {
+        RequestContextController rc = context.getStore(NS)
+                .remove("requestContext", RequestContextController.class);
+        if (rc != null) {
+            rc.deactivate();
+        }
+    }
+
+    @Override
+    public void afterAll(ExtensionContext context) {
+        SeContainer container = context.getStore(NS)
+                .remove("container", SeContainer.class);
+        if (container != null && container.isRunning()) {
+            container.close();
+        }
+        DynamicTestBeanContext.reset();
     }
 }

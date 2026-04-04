@@ -24,9 +24,9 @@ WELD-001408: Unsatisfied dependencies for type BaseDao<Order>
 
 ## Solution
 
-Add `dynamic-cdi-test-bean-addon` as a test dependency. The extension observes all
-injection points during bootstrap and registers `@RequestScoped` Mockito mocks
-for every type that has no matching bean.
+Add `dynamic-cdi-test-bean-addon` as a test dependency. The extension observes
+all injection points during bootstrap and registers `@RequestScoped` Mockito
+mocks for every type that has no matching bean.
 
 ### Supported injection point types
 
@@ -58,44 +58,10 @@ for every type that has no matching bean.
 </dependency>
 ```
 
-The extension registers itself via
-`META-INF/services/jakarta.enterprise.inject.spi.Extension` — no manual
-configuration is needed.
+### Simplest test — zero boilerplate
 
-### Basic test (zero configuration)
-
-```java
-class MyServiceTest {
-
-    static SeContainer container;
-    static RequestContextController rc;
-
-    @BeforeAll
-    static void boot() {
-        container = SeContainerInitializer.newInstance().initialize();
-        rc = container.select(RequestContextController.class).get();
-        rc.activate();
-    }
-
-    @AfterAll
-    static void shutdown() {
-        rc.deactivate();
-        container.close();
-    }
-
-    @Test
-    void serviceStartsWithMockedDependencies() {
-        MyService service = container.select(MyService.class).get();
-        assertNotNull(service);
-        assertNull(service.getDao().findById(1L)); // Mockito default
-    }
-}
-```
-
-### With @Inject into the test class
-
-`@EnableTestBeans` registers the test class as a `@Singleton` CDI bean and
-injects `@Inject` fields after container bootstrap:
+`@EnableTestBeans` manages the CDI container lifecycle, request scope, and
+`@Inject` field injection automatically:
 
 ```java
 @EnableTestBeans
@@ -104,6 +70,26 @@ class MyServiceTest {
     @Inject
     MyService service;
 
+    @Test
+    void serviceStartsWithMockedDependencies() {
+        assertNotNull(service);
+        assertNull(service.getDao().findById(1L)); // Mockito default
+    }
+}
+```
+
+No `@BeforeAll`, no `@AfterAll`, no `SeContainerInitializer`. The extension
+handles container start, request scope activation per test method, `@Inject`
+field injection, and shutdown.
+
+### Manual container management
+
+Use `manageContainer = false` if you need control over the container lifecycle:
+
+```java
+@EnableTestBeans(manageContainer = false)
+class MyTest {
+
     static SeContainer container;
 
     @BeforeAll
@@ -111,14 +97,12 @@ class MyServiceTest {
         container = SeContainerInitializer.newInstance().initialize();
     }
 
-    @Test
-    void serviceIsInjected() {
-        assertNotNull(service);
+    @AfterAll
+    static void shutdown() {
+        container.close();
     }
 }
 ```
-
-Use `@EnableTestBeans(addTestClass = false)` to disable this.
 
 ## Custom replacement beans with @TestBean
 
@@ -136,7 +120,13 @@ public class CustomGreeting implements Greeting {
 
 @EnableTestBeans
 @TestBean(bean = CustomGreeting.class)
-class MyTest { ... }
+class MyTest {
+    @Inject GreetingConsumer consumer;
+
+    @Test void test() {
+        assertEquals("Hello, world!", consumer.getGreeting().greet("world"));
+    }
+}
 ```
 
 ### Producer-based replacement
@@ -163,6 +153,8 @@ The simplest pattern for one-off mocks with stubbing:
 class MyTest {
     @Produces @TestBean
     private static Greeting greeting = Mockito.mock(Greeting.class);
+
+    @Inject GreetingConsumer consumer;
 }
 ```
 
@@ -192,8 +184,7 @@ across annotations are deduplicated automatically.
 ### Whitelist mode
 
 `limitToTestBeans = true` vetoes ALL application beans except those
-explicitly declared via `@TestBean`. No auto-mocking occurs — only
-the whitelisted beans and CDI internals survive:
+explicitly declared via `@TestBean`. No auto-mocking occurs:
 
 ```java
 @EnableTestBeans(limitToTestBeans = true)
@@ -206,8 +197,15 @@ class MyTest { ... }
 Multiple test classes on the same classpath can activate **different
 alternatives for the same type** without conflicts. The internal JUnit
 extension scopes each test class's `@TestBean` declarations independently.
-Unselected `@Alternative` beans are vetoed to prevent their `@Produces`
-methods from conflicting.
+Unselected `@Alternative` beans are vetoed.
+
+## @EnableTestBeans attributes
+
+| Attribute | Default | Description |
+|-----------|---------|-------------|
+| `manageContainer` | `true` | Start/stop CDI container and request scope automatically |
+| `addTestClass` | `true` | Register test class as `@Singleton` bean, inject `@Inject` fields |
+| `limitToTestBeans` | `false` | Veto all beans except those declared via `@TestBean` |
 
 ## Package structure
 
@@ -225,9 +223,7 @@ However, it detects types managed by other extensions and avoids mocking them.
 Currently recognized:
 
 - **Apache DeltaSpike** — types annotated with a `@PartialBeanBinding`
-  binding annotation are skipped. DeltaSpike's partial bean module provides
-  the real proxy; the addon only mocks the handler's own unsatisfied
-  dependencies.
+  binding annotation are skipped.
 
 ## CDI implementation compatibility
 
@@ -239,12 +235,6 @@ CDI implementations via Maven profiles:
 | **OpenWebBeans** 4.0.3 (default)      | `owb`     | `mvn test` or `mvn test -Powb` |
 | **Weld** 5.1.4.Final                  | `weld`    | `mvn test -Pweld`       |
 
-### OpenWebBeans and Java 25
-
-OWB 4.0.3 ships with an older xbean-asm that does not support Java 25 class
-files (major version 69). The OWB profile overrides xbean-asm and adds
-ASM 9.8 to resolve this.
-
 ## Requirements
 
 | Dependency       | Version             |
@@ -254,33 +244,22 @@ ASM 9.8 to resolve this.
 | JUnit            | 6.0.3 (provided)    |
 | Java             | 25+                 |
 
-Both CDI API and Mockito are `provided` scope — the consumer supplies the
-actual versions.
-
 ## Code quality
-
-The build enforces code quality through several Maven plugins that run
-automatically during `mvn clean install`:
 
 | Plugin                          | Phase      | Purpose                                                        |
 |---------------------------------|------------|----------------------------------------------------------------|
 | **maven-compiler-plugin**       | `compile`  | `-Xlint:all` with `failOnWarning` — all compiler warnings are errors |
 | **maven-enforcer-plugin**       | `validate` | Java 25+, Maven 3.6.3+, dependency convergence, banned `javax.*` dependencies, no duplicate classes |
-| **maven-checkstyle-plugin**     | `validate` | Code style: no star imports, braces on all blocks, modifier order, whitespace rules, empty line separators |
-| **apache-rat-plugin**           | `validate` | Apache License 2.0 header present in all source files (Java, XML, service files, POM) |
-| **maven-javadoc-plugin**        | `package`  | Generates and attaches Javadoc JAR                             |
+| **maven-checkstyle-plugin**     | `validate` | Code style: no star imports, braces on all blocks, modifier order, whitespace rules |
+| **apache-rat-plugin**           | `validate` | Apache License 2.0 header present in all source files |
+| **maven-javadoc-plugin**        | `package`  | Generates and attaches Javadoc JAR |
 
 ## Building
 
 ```bash
-# Build and run tests with OpenWebBeans (default)
-mvn clean install
-
-# Run tests with Weld
-mvn clean test -Pweld
-
-# Generate Javadoc
-mvn javadoc:javadoc
+mvn clean install           # OpenWebBeans (default)
+mvn clean test -Pweld       # Weld
+mvn javadoc:javadoc         # Generate Javadoc
 ```
 
 ## License

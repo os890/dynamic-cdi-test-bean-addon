@@ -113,4 +113,21 @@ public @interface EnableTestBeans {
      * @return {@code true} to enable whitelist mode
      */
     boolean limitToTestBeans() default false;
+
+    /**
+     * When {@code true}, the JUnit extension manages the CDI SE container
+     * lifecycle automatically:
+     * <ul>
+     *   <li>{@code @BeforeAll} — starts the container via
+     *       {@code SeContainerInitializer}</li>
+     *   <li>{@code @BeforeEach} — activates the request scope</li>
+     *   <li>{@code @AfterEach} — deactivates the request scope</li>
+     *   <li>{@code @AfterAll} — shuts down the container</li>
+     * </ul>
+     * Defaults to {@code true}. Set to {@code false} to manage the
+     * container manually in {@code @BeforeAll}/{@code @AfterAll}.
+     *
+     * @return {@code true} to enable automatic container management
+     */
+    boolean manageContainer() default true;
 }

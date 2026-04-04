@@ -19,7 +19,7 @@ package org.os890.cdi.addon.dynamictestbean.testbean;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-import jakarta.enterprise.inject.spi.CDI;
+import jakarta.inject.Inject;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -28,19 +28,26 @@ import org.os890.cdi.addon.dynamictestbean.TestBean;
 import org.os890.cdi.addon.dynamictestbean.usecase.GreetingConsumer;
 
 /**
- * Isolation test: activates {@link FormalGreeting} for {@link Greeting}.
- * Runs alongside {@link CustomGreetingIsolationTest} which activates
- * {@link CustomGreeting} for the same type — proving that the JUnit
- * extension correctly scopes alternatives per test class.
+ * Tests that {@code @Typed} on an alternative prevents a false veto.
+ *
+ * <p>{@code TypedAlternative} implements both {@code Greeting} and
+ * {@code StatusService}, but {@code @Typed(StatusService.class)}
+ * restricts its bean types. A {@code @TestBean} for {@code Greeting}
+ * (via {@code CustomGreeting}) should NOT veto it — no type clash.</p>
  */
 @EnableTestBeans
-@TestBean(bean = FormalGreeting.class)
-class FormalGreetingIsolationTest {
+@TestBean(bean = CustomGreeting.class)
+class TypedAlternativeTest {
+
+    @Inject
+    GreetingConsumer consumer;
 
     @Test
-    @DisplayName("FormalGreeting is active — returns 'Good day, ...'")
-    void formalGreetingIsActive() {
-        GreetingConsumer consumer = CDI.current().select(GreetingConsumer.class).get();
-        assertEquals("Good day, world.", consumer.getGreeting().greet("world"));
+    @DisplayName("@Typed alternative is NOT vetoed — no type clash with @TestBean")
+    void typedAlternativeNotVetoed() {
+        // CustomGreeting provides Greeting.
+        // TypedAlternative provides only StatusService (due to @Typed).
+        // No clash — container starts without errors.
+        assertEquals("Hello, world!", consumer.getGreeting().greet("world"));
     }
 }

@@ -29,6 +29,7 @@ public final class DynamicTestBeanContext {
     private static volatile Class<?> activeTestClass;
     private static volatile boolean addTestClass = true;
     private static volatile boolean limitToTestBeans;
+    private static volatile boolean manageContainer = true;
 
     private DynamicTestBeanContext() {
     }
@@ -63,10 +64,21 @@ public final class DynamicTestBeanContext {
         return limitToTestBeans;
     }
 
+    /** Sets whether the extension manages the CDI container lifecycle. */
+    public static void setManageContainer(boolean value) {
+        manageContainer = value;
+    }
+
+    /** Returns whether the extension manages the CDI container lifecycle. */
+    public static boolean isManageContainer() {
+        return manageContainer;
+    }
+
     /** Resets all state. */
     public static void reset() {
         activeTestClass = null;
         addTestClass = true;
         limitToTestBeans = false;
+        manageContainer = true;
     }
 }

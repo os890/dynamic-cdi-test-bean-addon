@@ -19,12 +19,8 @@ package org.os890.cdi.addon.dynamictestbean.testbean;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-import jakarta.enterprise.context.control.RequestContextController;
-import jakarta.enterprise.inject.se.SeContainer;
-import jakarta.enterprise.inject.se.SeContainerInitializer;
+import jakarta.enterprise.inject.spi.CDI;
 
-import org.junit.jupiter.api.AfterAll;
-import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.os890.cdi.addon.dynamictestbean.EnableTestBeans;
@@ -41,30 +37,10 @@ import org.os890.cdi.addon.dynamictestbean.usecase.GreetingConsumer;
 @TestBean(bean = CustomGreeting.class)
 class CustomGreetingIsolationTest {
 
-    private static SeContainer container;
-    private static RequestContextController requestContext;
-
-    @BeforeAll
-    static void bootContainer() {
-        container = SeContainerInitializer.newInstance().initialize();
-        requestContext = container.select(RequestContextController.class).get();
-        requestContext.activate();
-    }
-
-    @AfterAll
-    static void shutdownContainer() {
-        if (requestContext != null) {
-            requestContext.deactivate();
-        }
-        if (container != null && container.isRunning()) {
-            container.close();
-        }
-    }
-
     @Test
     @DisplayName("CustomGreeting is active — returns 'Hello, ...'")
     void customGreetingIsActive() {
-        GreetingConsumer consumer = container.select(GreetingConsumer.class).get();
+        GreetingConsumer consumer = CDI.current().select(GreetingConsumer.class).get();
         assertEquals("Hello, world!", consumer.getGreeting().greet("world"));
     }
 }

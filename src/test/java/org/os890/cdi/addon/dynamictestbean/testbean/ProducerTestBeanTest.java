@@ -20,12 +20,8 @@ package org.os890.cdi.addon.dynamictestbean.testbean;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
-import jakarta.enterprise.context.control.RequestContextController;
-import jakarta.enterprise.inject.se.SeContainer;
-import jakarta.enterprise.inject.se.SeContainerInitializer;
+import jakarta.enterprise.inject.spi.CDI;
 
-import org.junit.jupiter.api.AfterAll;
-import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.os890.cdi.addon.dynamictestbean.EnableTestBeans;
@@ -45,30 +41,10 @@ import org.os890.cdi.addon.dynamictestbean.usecase.AuditConsumer;
 @TestBean(beanProducer = TestProducers.class)
 class ProducerTestBeanTest {
 
-    private static SeContainer container;
-    private static RequestContextController requestContext;
-
-    @BeforeAll
-    static void bootContainer() {
-        container = SeContainerInitializer.newInstance().initialize();
-        requestContext = container.select(RequestContextController.class).get();
-        requestContext.activate();
-    }
-
-    @AfterAll
-    static void shutdownContainer() {
-        if (requestContext != null) {
-            requestContext.deactivate();
-        }
-        if (container != null && container.isRunning()) {
-            container.close();
-        }
-    }
-
     @Test
     @DisplayName("Producer method provides custom AuditService")
     void producerProvidesCustomAuditService() {
-        AuditConsumer consumer = container.select(AuditConsumer.class).get();
+        AuditConsumer consumer = CDI.current().select(AuditConsumer.class).get();
 
         assertNotNull(consumer.getAuditService());
         assertDoesNotThrow(() -> consumer.getAuditService().audit("login"));
@@ -77,7 +53,7 @@ class ProducerTestBeanTest {
     @Test
     @DisplayName("Produced bean is functional, not a Mockito mock")
     void producedBeanIsFunctional() {
-        AuditConsumer consumer = container.select(AuditConsumer.class).get();
+        AuditConsumer consumer = CDI.current().select(AuditConsumer.class).get();
 
         assertDoesNotThrow(() -> consumer.getAuditService().audit("first"));
         assertDoesNotThrow(() -> consumer.getAuditService().audit("second"));

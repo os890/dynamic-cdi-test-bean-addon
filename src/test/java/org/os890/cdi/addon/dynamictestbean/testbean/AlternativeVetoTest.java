@@ -26,26 +26,40 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.os890.cdi.addon.dynamictestbean.EnableTestBeans;
 import org.os890.cdi.addon.dynamictestbean.TestBean;
-import org.os890.cdi.addon.dynamictestbean.usecase.Greeting;
 import org.os890.cdi.addon.dynamictestbean.usecase.GreetingConsumer;
+import org.os890.cdi.addon.dynamictestbean.usecase.StatusConsumer;
 
 /**
- * Tests that a plain class (no CDI annotations) can be registered
- * via {@code @TestBean} and that a second test class won't see it.
+ * Tests that the veto logic correctly handles alternatives:
+ * <ul>
+ *   <li>{@code CustomGreeting} is selected via {@code @TestBean} —
+ *       survives, replaces the mock for {@code Greeting}.</li>
+ *   <li>{@code PriorityStatusService} has {@code @Priority(100)} and
+ *       overlaps with nothing in the {@code @TestBean} set — survives.</li>
+ *   <li>{@code FormalGreeting} is an unselected alternative whose type
+ *       ({@code Greeting}) clashes with {@code CustomGreeting} — vetoed.</li>
+ * </ul>
  */
 @EnableTestBeans
-@TestBean(bean = PlainGreeting.class)
-class PlainBeanTest {
+@TestBean(bean = CustomGreeting.class)
+class AlternativeVetoTest {
 
     @Inject
-    GreetingConsumer consumer;
+    GreetingConsumer greetingConsumer;
+
+    @Inject
+    StatusConsumer statusConsumer;
 
     @Test
-    @DisplayName("Plain class without CDI annotations is registered as a bean")
-    void plainClassIsRegisteredAsBean() {
-        assertNotNull(consumer);
-        Greeting greeting = consumer.getGreeting();
-        assertNotNull(greeting);
-        assertEquals("Plain: world", greeting.greet("world"));
+    @DisplayName("Selected @TestBean alternative wins")
+    void selectedAlternativeWins() {
+        assertEquals("Hello, world!", greetingConsumer.getGreeting().greet("world"));
+    }
+
+    @Test
+    @DisplayName("@Alternative @Priority for a non-overlapping type is NOT vetoed")
+    void priorityAlternativeForDifferentTypeNotVetoed() {
+        assertNotNull(statusConsumer.getStatusService());
+        assertEquals("OK", statusConsumer.getStatusService().getStatus());
     }
 }

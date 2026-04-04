@@ -73,17 +73,18 @@
     <a href="index.html">Auto-Mocking</a>
     <a href="testbean.html">@TestBean Basics</a>
     <a href="testbean-advanced.html" class="active">Advanced Features</a>
+    <a href="internals.html">Internals</a>
     <a href="https://github.com/os890/dynamic-cdi-test-bean-addon">GitHub</a>
 </nav>
 
 <section class="hero">
     <h1>
         <span>Advanced @TestBean</span><br>
-        Injection, Inline Producers, Whitelist Mode, Meta-Annotations
+        Producer Beans, Whitelist Mode, Meta-Annotations
     </h1>
     <p class="subtitle">
-        Beyond <a href="testbean.html">basic @TestBean</a> &mdash; four features
-        that make CDI testing even more concise and composable.
+        Beyond <a href="testbean.html">basic @TestBean</a> &mdash;
+        features for complex test setups and reusable configurations.
     </p>
 </section>
 
@@ -91,80 +92,52 @@
 
 <p>
     This post builds on the <a href="index.html">auto-mocking</a> and
-    <a href="testbean.html">basic @TestBean</a> features. Make sure you're
-    familiar with those first.
+    <a href="testbean.html">@TestBean basics</a> features. Make sure
+    you're familiar with those first.
 </p>
 
-<!-- ======== @Inject into test class ======== -->
-<h2>1. @Inject Into the Test Class</h2>
+<!-- ======== Producer beans ======== -->
+<h2>1. Producer Bean Replacements</h2>
 
 <p>
-    By default, <code>@EnableTestBeans</code> registers the test class as a
-    <code>@Singleton</code> CDI bean and injects <code>@Inject</code> fields
-    after container bootstrap. No <code>container.select()</code> needed.
+    When a single <code>@Alternative</code> class should provide
+    multiple bean types, use <code>beanProducer</code> to activate a
+    class with <code>@Produces</code> methods:
+</p>
+
+<pre><code><span class="an">@Alternative</span>
+<span class="an">@ApplicationScoped</span>
+<span class="kw">public class</span> <span class="ty">TestProducers</span> {
+
+    <span class="an">@Produces</span>
+    <span class="kw">public</span> <span class="ty">AuditService</span> <span class="fn">audit</span>() {
+        <span class="kw">return</span> action -&gt; { <span class="cm">/* no-op */</span> };
+    }
+
+    <span class="an">@Produces</span>
+    <span class="kw">public</span> <span class="ty">MetricsService</span> <span class="fn">metrics</span>() {
+        <span class="kw">return</span> <span class="ty">Mockito</span>.<span class="fn">mock</span>(<span class="ty">MetricsService</span>.<span class="kw">class</span>);
+    }
+}
+
+<span class="an">@EnableTestBeans</span>
+<span class="an">@TestBean</span>(beanProducer = <span class="ty">TestProducers</span>.<span class="kw">class</span>)
+<span class="kw">class</span> <span class="ty">MyTest</span> {
+    <span class="cm">// AuditService and MetricsService from TestProducers</span>
+    <span class="cm">// Everything else auto-mocked</span>
+}</code></pre>
+
+<p>
+    <code>bean</code> and <code>beanProducer</code> can be combined:
 </p>
 
 <pre><code><span class="an">@EnableTestBeans</span>
 <span class="an">@TestBean</span>(bean = <span class="ty">CustomGreeting</span>.<span class="kw">class</span>)
-<span class="kw">class</span> <span class="ty">MyTest</span> {
-
-    <span class="an">@Inject</span>
-    <span class="ty">GreetingConsumer</span> consumer;  <span class="cm">// injected by CDI</span>
-
-    <span class="kw">static</span> <span class="ty">SeContainer</span> container;
-
-    <span class="an">@BeforeAll</span>
-    <span class="kw">static void</span> <span class="fn">boot</span>() {
-        container = <span class="ty">SeContainerInitializer</span>.<span class="fn">newInstance</span>().<span class="fn">initialize</span>();
-    }
-
-    <span class="an">@Test</span>
-    <span class="kw">void</span> <span class="fn">test</span>() {
-        <span class="fn">assertEquals</span>(<span class="st">"Hello, world!"</span>, consumer.<span class="fn">getGreeting</span>().<span class="fn">greet</span>(<span class="st">"world"</span>));
-    }
-}</code></pre>
-
-<p>
-    Disable with <code>@EnableTestBeans(addTestClass = false)</code> if you
-    don't want the test class to be a CDI bean.
-</p>
-
-<!-- ======== Inline producer fields ======== -->
-<h2>2. Inline @Produces @TestBean Fields</h2>
-
-<p>
-    The simplest way to provide a pre-configured mock: declare a
-    <code>static</code> field with <code>@Produces @TestBean</code>.
-    The extension reads the field value and registers it as a
-    <code>@Singleton</code> CDI bean. Qualifiers on the field are carried over.
-</p>
-
-<pre><code><span class="an">@EnableTestBeans</span>
-<span class="kw">class</span> <span class="ty">MyTest</span> {
-
-    <span class="an">@Produces</span> <span class="an">@TestBean</span>
-    <span class="kw">private static</span> <span class="ty">Greeting</span> greeting = <span class="ty">Mockito</span>.<span class="fn">mock</span>(<span class="ty">Greeting</span>.<span class="kw">class</span>);
-
-    <span class="an">@Inject</span>
-    <span class="ty">GreetingConsumer</span> consumer;
-
-    <span class="cm">// ... boot container in @BeforeAll ...</span>
-
-    <span class="an">@Test</span>
-    <span class="kw">void</span> <span class="fn">test</span>() {
-        <span class="ty">Mockito</span>.<span class="fn">when</span>(greeting.<span class="fn">greet</span>(<span class="st">"world"</span>)).<span class="fn">thenReturn</span>(<span class="st">"Stubbed!"</span>);
-        <span class="fn">assertEquals</span>(<span class="st">"Stubbed!"</span>, consumer.<span class="fn">getGreeting</span>().<span class="fn">greet</span>(<span class="st">"world"</span>));
-    }
-}</code></pre>
-
-<div class="callout">
-    <strong>Isolation guaranteed.</strong> Two test classes can declare inline
-    fields for the same type with different values &mdash; each test class
-    only sees its own field. No conflicts, no <code>reuseForks</code> needed.
-</div>
+<span class="an">@TestBean</span>(beanProducer = <span class="ty">TestProducers</span>.<span class="kw">class</span>)
+<span class="kw">class</span> <span class="ty">MyTest</span> { ... }</code></pre>
 
 <!-- ======== Whitelist mode ======== -->
-<h2>3. Whitelist Mode</h2>
+<h2>2. Whitelist Mode</h2>
 
 <p>
     <code>limitToTestBeans = true</code> vetoes <strong>all</strong>
@@ -189,7 +162,7 @@
 </p>
 
 <!-- ======== Composable meta-annotations ======== -->
-<h2>4. Composable Meta-Annotations</h2>
+<h2>3. Composable Meta-Annotations</h2>
 
 <p>
     Bundle <code>@TestBean</code> declarations into reusable annotations.
@@ -243,23 +216,8 @@
     </thead>
     <tbody>
         <tr>
-            <td>Inject <code>@Inject</code> fields on test class</td>
-            <td><code>@EnableTestBeans</code></td>
-            <td>On (<code>addTestClass = true</code>)</td>
-        </tr>
-        <tr>
-            <td>Activate <code>@Alternative</code> bean</td>
-            <td><code>@TestBean(bean = ...)</code></td>
-            <td>&mdash;</td>
-        </tr>
-        <tr>
-            <td>Activate <code>@Alternative</code> producer</td>
+            <td>Activate <code>@Alternative</code> producer bean</td>
             <td><code>@TestBean(beanProducer = ...)</code></td>
-            <td>&mdash;</td>
-        </tr>
-        <tr>
-            <td>Inline producer field</td>
-            <td><code>@Produces @TestBean</code> on static field</td>
             <td>&mdash;</td>
         </tr>
         <tr>
@@ -271,6 +229,16 @@
             <td>Composable meta-annotations</td>
             <td><code>@TestBean</code> on custom annotations</td>
             <td>Recursive, deduplicated</td>
+        </tr>
+        <tr>
+            <td>Manual container management</td>
+            <td><code>@EnableTestBeans(manageContainer = false)</code></td>
+            <td>Off (auto-managed by default)</td>
+        </tr>
+        <tr>
+            <td>Disable test class injection</td>
+            <td><code>@EnableTestBeans(addTestClass = false)</code></td>
+            <td>Off (injected by default)</td>
         </tr>
     </tbody>
 </table>

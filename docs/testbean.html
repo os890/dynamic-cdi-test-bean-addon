@@ -231,55 +231,53 @@
     <a href="index.html">Auto-Mocking</a>
     <a href="testbean.html" class="active">@TestBean Basics</a>
     <a href="testbean-advanced.html">Advanced Features</a>
+    <a href="internals.html">Internals</a>
     <a href="https://github.com/os890/dynamic-cdi-test-bean-addon">GitHub</a>
 </nav>
 
 <section class="hero">
     <h1>
-        <span>@EnableTestBeans</span><br>
-        Custom Test Implementations Without @Priority
+        <span>@TestBean</span><br>
+        Replace Mocks With Real Implementations
     </h1>
     <p class="subtitle">
-        Mockito mocks are great for most tests. But sometimes you need a
-        hand-crafted replacement. <code>@EnableTestBeans</code> lets you activate
-        CDI alternatives per test class &mdash; no <code>@Priority</code>,
-        no <code>beans.xml</code>, no global side effects.
+        Auto-mocking gets the container started. <code>@TestBean</code> lets you
+        swap specific mocks for hand-crafted replacements &mdash; per test class,
+        no <code>@Priority</code>, no global side effects.
     </p>
 </section>
 
 <main class="content">
 
-<h2>The Motivation</h2>
+<h2>When Mocks Aren't Enough</h2>
 
 <p>
-    The <a href="index.html">Dynamic CDI Test Bean Addon</a> auto-mocks
-    unsatisfied injection points with Mockito. That works perfectly when you
-    just need the container to start. But what if you need a specific test
-    implementation &mdash; one that records calls, returns computed values,
-    or validates inputs?
+    <a href="index.html">Auto-mocking</a> gets the container started. But
+    sometimes a Mockito mock isn't what you need &mdash; you want a real
+    implementation that records calls, returns computed values, or validates
+    inputs.
 </p>
 
 <p>
-    You could stub the Mockito mock, but that only works when you can access
-    the mock instance directly. With CDI proxies and <code>@RequestScoped</code>
-    beans, that's not always straightforward. What you really want is a
-    proper CDI bean that implements the contract your way.
+    CDI has <code>@Alternative</code> for exactly this. With
+    <code>@Priority</code>, they're globally enabled &mdash; which works
+    fine and the addon doesn't interfere with that. But a globally
+    enabled alternative affects <em>every</em> test on the classpath.
+    Sometimes you need different replacements for different tests.
 </p>
 
-<p>
-    CDI has <code>@Alternative</code> for exactly this. The problem:
-    alternatives need <code>@Priority</code> to be globally enabled, and a
-    globally enabled alternative affects <em>every</em> test on the classpath.
-    You can't activate one alternative for <code>OrderServiceTest</code> and
-    a different one for <code>PaymentServiceTest</code>.
-</p>
-
-<h2>The Solution: @EnableTestBeans</h2>
+<h2>The Solution: @TestBean</h2>
 
 <p>
-    <code>@EnableTestBeans</code> lets you activate <code>@Alternative</code>
-    beans per test class. The extension enables them programmatically via
-    <code>AfterTypeDiscovery</code> &mdash; no <code>@Priority</code> needed.
+    <code>@TestBean</code> activates <code>@Alternative</code> beans
+    <strong>per test class</strong>, without <code>@Priority</code>.
+    The extension enables them programmatically and vetoes unselected
+    alternatives to prevent conflicts. Existing
+    Other alternatives &mdash; whether enabled via <code>@Priority</code>
+    or <code>beans.xml</code> &mdash; continue to work normally as long
+    as their bean types don't overlap with a <code>@TestBean</code>
+    replacement. The extension respects <code>@Typed</code> on both
+    sides when checking for type clashes.
 </p>
 
 <ol class="steps">
@@ -318,127 +316,40 @@
 }</code></pre>
     </li>
     <li>
-        <strong>Or use <code>beanProducer</code> for a producer bean</strong>
-        that provides multiple types via <code>@Produces</code> methods:
-<pre><code><span class="an">@Alternative</span>
-<span class="an">@ApplicationScoped</span>
-<span class="kw">public class</span> <span class="ty">TestProducers</span> {
+        <strong>Or use an inline <code>@Produces @TestBean</code> field</strong>
+        &mdash; define and stub a Mockito mock right in the test class:
+<pre><code><span class="an">@EnableTestBeans</span>
+<span class="kw">class</span> <span class="ty">GreetingTest</span> {
 
-    <span class="an">@Produces</span>
-    <span class="kw">public</span> <span class="ty">AuditService</span> <span class="fn">audit</span>() {
-        <span class="kw">return</span> action -&gt; <span class="st">"audited: "</span> + action;
+    <span class="an">@Produces</span> <span class="an">@TestBean</span>
+    <span class="kw">private static</span> <span class="ty">Greeting</span> greeting = <span class="ty">Mockito</span>.<span class="fn">mock</span>(<span class="ty">Greeting</span>.<span class="kw">class</span>);
+
+    <span class="an">@Inject</span>
+    <span class="ty">GreetingConsumer</span> consumer;
+
+    <span class="an">@Test</span>
+    <span class="kw">void</span> <span class="fn">stubbedMockIsInjected</span>() {
+        <span class="ty">Mockito</span>.<span class="fn">when</span>(greeting.<span class="fn">greet</span>(<span class="st">"world"</span>)).<span class="fn">thenReturn</span>(<span class="st">"Stubbed!"</span>);
+
+        <span class="fn">assertEquals</span>(<span class="st">"Stubbed!"</span>, consumer.<span class="fn">getGreeting</span>().<span class="fn">greet</span>(<span class="st">"world"</span>));
+        <span class="fn">assertNull</span>(consumer.<span class="fn">getGreeting</span>().<span class="fn">greet</span>(<span class="st">"other"</span>));  <span class="cm">// unstubbed → null</span>
     }
-}
-
-<span class="an">@EnableTestBeans</span>
-<span class="an">@TestBean</span>(beanProducer = <span class="ty">TestProducers</span>.<span class="kw">class</span>)
-<span class="kw">class</span> <span class="ty">AuditTest</span> {
-    <span class="cm">// AuditService comes from the producer, rest auto-mocked</span>
 }</code></pre>
+
+        <p>
+            No separate class, no <code>@Alternative</code>, no
+            <code>@ApplicationScoped</code>. The static field holds a
+            pre-configured Mockito mock that becomes a CDI bean.
+            Stubbing and verification work exactly as you'd expect.
+        </p>
     </li>
 </ol>
 
 <p>
-    Both <code>bean</code> and <code>beanProducer</code> can be combined:
+    For producer beans with <code>@Produces</code> methods, composable
+    meta-annotations, whitelist mode, and more, see
+    <a href="testbean-advanced.html"><strong>Advanced Features</strong></a>.
 </p>
-
-<pre><code><span class="an">@EnableTestBeans</span>
-<span class="an">@TestBean</span>(bean = <span class="ty">CustomGreeting</span>.<span class="kw">class</span>)
-<span class="an">@TestBean</span>(beanProducer = <span class="ty">TestProducers</span>.<span class="kw">class</span>)
-<span class="kw">class</span> <span class="ty">CombinedTest</span> {
-    <span class="cm">// Greeting from CustomGreeting, AuditService from TestProducers, rest auto-mocked</span>
-}</code></pre>
-
-<h2>How It Works Internally</h2>
-
-<p>
-    The extension hooks into three CDI lifecycle phases:
-</p>
-
-<h3>1. Veto unselected alternatives</h3>
-
-<p>
-    During <code>ProcessAnnotatedType</code>, the extension vetoes any
-    <code>@Alternative</code> bean that is <strong>not</strong> referenced
-    by the active test class's <code>@TestBean</code>. This prevents their
-    <code>@Produces</code> methods from registering beans that would
-    conflict with auto-generated Mockito mocks.
-</p>
-
-<h3>2. Enable selected alternatives</h3>
-
-<p>
-    During <code>AfterTypeDiscovery</code>, the extension reads
-    <code>@TestBean</code> annotations from the active test class and
-    enables each referenced alternative. The active test class is set
-    by the internal JUnit extension (embedded in <code>@EnableTestBeans</code>)
-    before the CDI container starts.
-</p>
-
-<h3>3. Mock the rest</h3>
-
-<p>
-    During <code>AfterBeanDiscovery</code>, Mockito mocks are registered
-    only for injection points that are still unsatisfied &mdash; the
-    enabled alternatives already cover their types.
-</p>
-
-<div class="callout">
-    <strong>No @Priority, no global activation.</strong> The alternative is
-    enabled for the current container bootstrap only. Different test classes
-    on the same classpath can activate different alternatives &mdash; the
-    JUnit extension scopes each <code>@TestBean</code> to its own test class.
-</div>
-
-<h2>Key Rules</h2>
-
-<table>
-    <thead>
-        <tr><th>Aspect</th><th>Rule</th></tr>
-    </thead>
-    <tbody>
-        <tr>
-            <td>Replacement bean</td>
-            <td>Normal CDI bean with <code>@Alternative</code> (no <code>@Priority</code>).
-                Use <code>bean</code> for direct implementations, <code>beanProducer</code>
-                for classes with <code>@Produces</code> methods.</td>
-        </tr>
-        <tr>
-            <td>Scope</td>
-            <td>Defined by the replacement bean itself (or <code>@Dependent</code> if none)</td>
-        </tr>
-        <tr>
-            <td>Qualifiers</td>
-            <td>Defined by the replacement bean &mdash; must match the injection point</td>
-        </tr>
-        <tr>
-            <td>Test class annotations</td>
-            <td><code>@EnableTestBeans</code> + one or more <code>@TestBean</code></td>
-        </tr>
-        <tr>
-            <td>Non-replaced types</td>
-            <td>Still auto-mocked by the extension</td>
-        </tr>
-    </tbody>
-</table>
-
-<h2>Package Structure</h2>
-
-<table>
-    <thead>
-        <tr><th>Package</th><th>Contents</th></tr>
-    </thead>
-    <tbody>
-        <tr>
-            <td><code>org.os890.cdi.addon.dynamictestbean</code></td>
-            <td><strong>Public API</strong> &mdash; <code>@EnableTestBeans</code>, <code>@TestBean</code>, <code>@TestBeans</code></td>
-        </tr>
-        <tr>
-            <td><code>org.os890.cdi.addon.dynamictestbean.internal</code></td>
-            <td>Extension internals &mdash; do not depend on directly</td>
-        </tr>
-    </tbody>
-</table>
 
 </main>
 
