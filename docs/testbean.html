@@ -1,0 +1,442 @@
+<!--
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+
+      http://www.apache.org/licenses/LICENSE-2.0
+
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>@EnableTestBeans &mdash; Custom Test Implementations Without @Priority</title>
+    <style>
+        :root {
+            --bg: #0f1117;
+            --surface: #161b22;
+            --border: #30363d;
+            --text: #e6edf3;
+            --text-muted: #8b949e;
+            --accent: #58a6ff;
+            --accent-hover: #79c0ff;
+            --green: #3fb950;
+            --orange: #d29922;
+            --code-bg: #1c2128;
+            --code-border: #262c36;
+            --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+            --font-mono: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', Consolas, monospace;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html { scroll-behavior: smooth; }
+
+        body {
+            font-family: var(--font-sans);
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.7;
+            font-size: 17px;
+        }
+
+        .hero {
+            background: linear-gradient(135deg, #0d1117 0%, #161b22 50%, #1a1f2b 100%);
+            border-bottom: 1px solid var(--border);
+            padding: 5rem 2rem 4rem;
+            text-align: center;
+        }
+
+        .hero h1 {
+            font-size: clamp(2rem, 5vw, 3rem);
+            font-weight: 800;
+            letter-spacing: -0.03em;
+            line-height: 1.2;
+            margin-bottom: 1.2rem;
+        }
+
+        .hero h1 span { color: var(--accent); }
+
+        .hero .subtitle {
+            font-size: 1.15rem;
+            color: var(--text-muted);
+            max-width: 640px;
+            margin: 0 auto 2rem;
+        }
+
+        .content {
+            max-width: 820px;
+            margin: 0 auto;
+            padding: 3rem 2rem 5rem;
+        }
+
+        h2 {
+            font-size: 1.8rem;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+            margin: 3.5rem 0 1rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 1px solid var(--border);
+        }
+
+        h3 {
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin: 2rem 0 0.8rem;
+            color: var(--accent);
+        }
+
+        p { margin-bottom: 1rem; }
+        a { color: var(--accent); text-decoration: none; }
+        a:hover { color: var(--accent-hover); text-decoration: underline; }
+        strong { color: #f0f6fc; }
+
+        pre {
+            background: var(--code-bg);
+            border: 1px solid var(--code-border);
+            border-radius: 8px;
+            padding: 1.2rem 1.4rem;
+            overflow-x: auto;
+            margin: 1rem 0 1.5rem;
+            font-size: 0.88rem;
+            line-height: 1.6;
+        }
+
+        code { font-family: var(--font-mono); }
+
+        p code, li code, td code {
+            background: var(--code-bg);
+            border: 1px solid var(--code-border);
+            border-radius: 4px;
+            padding: 0.15em 0.4em;
+            font-size: 0.9em;
+        }
+
+        .kw { color: #ff7b72; }
+        .ty { color: #79c0ff; }
+        .fn { color: #d2a8ff; }
+        .st { color: #a5d6ff; }
+        .cm { color: #8b949e; font-style: italic; }
+        .an { color: #ffa657; }
+
+        ul, ol { margin: 0.5rem 0 1.5rem 1.5rem; }
+        li { margin-bottom: 0.4rem; color: var(--text-muted); }
+        li strong { color: var(--text); }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1rem 0 1.5rem;
+            font-size: 0.95rem;
+        }
+
+        th {
+            text-align: left;
+            padding: 0.7rem 1rem;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            font-weight: 600;
+        }
+
+        td {
+            padding: 0.6rem 1rem;
+            border: 1px solid var(--border);
+            color: var(--text-muted);
+        }
+
+        .callout {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-left: 4px solid var(--accent);
+            border-radius: 8px;
+            padding: 1rem 1.4rem;
+            margin: 1.5rem 0;
+            font-size: 0.95rem;
+            color: var(--text-muted);
+        }
+
+        .callout strong { color: var(--accent); }
+
+        .steps {
+            counter-reset: step;
+            list-style: none;
+            margin-left: 0;
+            padding: 0;
+        }
+
+        .steps li {
+            counter-increment: step;
+            position: relative;
+            padding-left: 3rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .steps li::before {
+            content: counter(step);
+            position: absolute;
+            left: 0;
+            top: 0.1em;
+            width: 2rem;
+            height: 2rem;
+            background: var(--accent);
+            color: var(--bg);
+            font-weight: 700;
+            font-size: 0.9rem;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        footer {
+            text-align: center;
+            padding: 2rem;
+            color: var(--text-muted);
+            font-size: 0.85rem;
+            border-top: 1px solid var(--border);
+        }
+
+        footer a { color: var(--accent); }
+
+        @media (max-width: 600px) {
+            .hero { padding: 3rem 1.2rem 2.5rem; }
+            .content { padding: 2rem 1.2rem 3rem; }
+            pre { font-size: 0.8rem; padding: 1rem; }
+        }
+    </style>
+</head>
+<body>
+
+<section class="hero">
+    <h1>
+        <span>@EnableTestBeans</span><br>
+        Custom Test Implementations Without @Priority
+    </h1>
+    <p class="subtitle">
+        Mockito mocks are great for most tests. But sometimes you need a
+        hand-crafted replacement. <code>@EnableTestBeans</code> lets you activate
+        CDI alternatives per test class &mdash; no <code>@Priority</code>,
+        no <code>beans.xml</code>, no global side effects.
+    </p>
+</section>
+
+<main class="content">
+
+<h2>The Motivation</h2>
+
+<p>
+    The <a href="index.html">Dynamic CDI Test Bean Addon</a> auto-mocks
+    unsatisfied injection points with Mockito. That works perfectly when you
+    just need the container to start. But what if you need a specific test
+    implementation &mdash; one that records calls, returns computed values,
+    or validates inputs?
+</p>
+
+<p>
+    You could stub the Mockito mock, but that only works when you can access
+    the mock instance directly. With CDI proxies and <code>@RequestScoped</code>
+    beans, that's not always straightforward. What you really want is a
+    proper CDI bean that implements the contract your way.
+</p>
+
+<p>
+    CDI has <code>@Alternative</code> for exactly this. The problem:
+    alternatives need <code>@Priority</code> to be globally enabled, and a
+    globally enabled alternative affects <em>every</em> test on the classpath.
+    You can't activate one alternative for <code>OrderServiceTest</code> and
+    a different one for <code>PaymentServiceTest</code>.
+</p>
+
+<h2>The Solution: @EnableTestBeans</h2>
+
+<p>
+    <code>@EnableTestBeans</code> lets you activate <code>@Alternative</code>
+    beans per test class. The extension enables them programmatically via
+    <code>AfterTypeDiscovery</code> &mdash; no <code>@Priority</code> needed.
+</p>
+
+<ol class="steps">
+    <li>
+        <strong>Create your replacement as a normal CDI bean with
+        <code>@Alternative</code></strong> &mdash; define your own scope,
+        qualifiers, and logic. Don't add <code>@Priority</code>.
+<pre><code><span class="an">@Alternative</span>
+<span class="an">@ApplicationScoped</span>
+<span class="kw">public class</span> <span class="ty">CustomGreeting</span> <span class="kw">implements</span> <span class="ty">Greeting</span> {
+
+    <span class="an">@Override</span>
+    <span class="kw">public</span> <span class="ty">String</span> <span class="fn">greet</span>(<span class="ty">String</span> name) {
+        <span class="kw">return</span> <span class="st">"Hello, "</span> + name + <span class="st">"!"</span>;
+    }
+}</code></pre>
+    </li>
+    <li>
+        <strong>Annotate your test class with <code>@EnableTestBeans</code> +
+        <code>@TestBean</code></strong> to activate it:
+<pre><code><span class="an">@EnableTestBeans</span>
+<span class="an">@TestBean</span>(bean = <span class="ty">CustomGreeting</span>.<span class="kw">class</span>)
+<span class="kw">class</span> <span class="ty">GreetingTest</span> {
+    <span class="cm">// Greeting injection points now use CustomGreeting</span>
+    <span class="cm">// Everything else is still auto-mocked</span>
+}</code></pre>
+    </li>
+    <li>
+        <strong>Activate multiple replacements</strong>
+        &mdash; <code>@TestBean</code> is repeatable:
+<pre><code><span class="an">@EnableTestBeans</span>
+<span class="an">@TestBean</span>(bean = <span class="ty">CustomGreeting</span>.<span class="kw">class</span>)
+<span class="an">@TestBean</span>(bean = <span class="ty">CustomNotificationSender</span>.<span class="kw">class</span>)
+<span class="kw">class</span> <span class="ty">FullIntegrationTest</span> {
+    <span class="cm">// Both alternatives active, rest auto-mocked</span>
+}</code></pre>
+    </li>
+    <li>
+        <strong>Or use <code>beanProducer</code> for a producer bean</strong>
+        that provides multiple types via <code>@Produces</code> methods:
+<pre><code><span class="an">@Alternative</span>
+<span class="an">@ApplicationScoped</span>
+<span class="kw">public class</span> <span class="ty">TestProducers</span> {
+
+    <span class="an">@Produces</span>
+    <span class="kw">public</span> <span class="ty">AuditService</span> <span class="fn">audit</span>() {
+        <span class="kw">return</span> action -&gt; <span class="st">"audited: "</span> + action;
+    }
+}
+
+<span class="an">@EnableTestBeans</span>
+<span class="an">@TestBean</span>(beanProducer = <span class="ty">TestProducers</span>.<span class="kw">class</span>)
+<span class="kw">class</span> <span class="ty">AuditTest</span> {
+    <span class="cm">// AuditService comes from the producer, rest auto-mocked</span>
+}</code></pre>
+    </li>
+</ol>
+
+<p>
+    Both <code>bean</code> and <code>beanProducer</code> can be combined:
+</p>
+
+<pre><code><span class="an">@EnableTestBeans</span>
+<span class="an">@TestBean</span>(bean = <span class="ty">CustomGreeting</span>.<span class="kw">class</span>)
+<span class="an">@TestBean</span>(beanProducer = <span class="ty">TestProducers</span>.<span class="kw">class</span>)
+<span class="kw">class</span> <span class="ty">CombinedTest</span> {
+    <span class="cm">// Greeting from CustomGreeting, AuditService from TestProducers, rest auto-mocked</span>
+}</code></pre>
+
+<h2>How It Works Internally</h2>
+
+<p>
+    The extension hooks into three CDI lifecycle phases:
+</p>
+
+<h3>1. Veto unselected alternatives</h3>
+
+<p>
+    During <code>ProcessAnnotatedType</code>, the extension vetoes any
+    <code>@Alternative</code> bean that is <strong>not</strong> referenced
+    by the active test class's <code>@TestBean</code>. This prevents their
+    <code>@Produces</code> methods from registering beans that would
+    conflict with auto-generated Mockito mocks.
+</p>
+
+<h3>2. Enable selected alternatives</h3>
+
+<p>
+    During <code>AfterTypeDiscovery</code>, the extension reads
+    <code>@TestBean</code> annotations from the active test class and
+    enables each referenced alternative. The active test class is set
+    by the internal JUnit extension (embedded in <code>@EnableTestBeans</code>)
+    before the CDI container starts.
+</p>
+
+<h3>3. Mock the rest</h3>
+
+<p>
+    During <code>AfterBeanDiscovery</code>, Mockito mocks are registered
+    only for injection points that are still unsatisfied &mdash; the
+    enabled alternatives already cover their types.
+</p>
+
+<div class="callout">
+    <strong>No @Priority, no global activation.</strong> The alternative is
+    enabled for the current container bootstrap only. Different test classes
+    on the same classpath can activate different alternatives &mdash; the
+    JUnit extension scopes each <code>@TestBean</code> to its own test class.
+</div>
+
+<h2>Key Rules</h2>
+
+<table>
+    <thead>
+        <tr><th>Aspect</th><th>Rule</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td>Replacement bean</td>
+            <td>Normal CDI bean with <code>@Alternative</code> (no <code>@Priority</code>).
+                Use <code>bean</code> for direct implementations, <code>beanProducer</code>
+                for classes with <code>@Produces</code> methods.</td>
+        </tr>
+        <tr>
+            <td>Scope</td>
+            <td>Defined by the replacement bean itself (or <code>@Dependent</code> if none)</td>
+        </tr>
+        <tr>
+            <td>Qualifiers</td>
+            <td>Defined by the replacement bean &mdash; must match the injection point</td>
+        </tr>
+        <tr>
+            <td>Test class annotations</td>
+            <td><code>@EnableTestBeans</code> + one or more <code>@TestBean</code></td>
+        </tr>
+        <tr>
+            <td>Non-replaced types</td>
+            <td>Still auto-mocked by the extension</td>
+        </tr>
+    </tbody>
+</table>
+
+<h2>Package Structure</h2>
+
+<table>
+    <thead>
+        <tr><th>Package</th><th>Contents</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><code>org.os890.cdi.addon.dynamictestbean</code></td>
+            <td><strong>Public API</strong> &mdash; <code>@EnableTestBeans</code>, <code>@TestBean</code>, <code>@TestBeans</code></td>
+        </tr>
+        <tr>
+            <td><code>org.os890.cdi.addon.dynamictestbean.internal</code></td>
+            <td>Extension internals &mdash; do not depend on directly</td>
+        </tr>
+    </tbody>
+</table>
+
+</main>
+
+<footer>
+    <p>
+        <a href="index.html">Dynamic CDI Test Bean Addon</a>
+        &nbsp;&middot;&nbsp;
+        <a href="https://github.com/os890/dynamic-cdi-test-bean-addon">Source on GitHub</a>
+        &nbsp;&middot;&nbsp;
+        <a href="https://www.apache.org/licenses/LICENSE-2.0">Apache License 2.0</a>
+    </p>
+    <p>
+        This is the first CDI extension from
+        <a href="https://github.com/os890">os890</a> created entirely in an
+        agentic AI workflow (Claude, Anthropic).
+    </p>
+</footer>
+
+</body>
+</html>

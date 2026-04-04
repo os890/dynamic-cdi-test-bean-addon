@@ -36,6 +36,7 @@ import org.junit.jupiter.api.MethodOrderer;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestMethodOrder;
 import org.mockito.Mockito;
+import org.os890.cdi.addon.dynamictestbean.internal.DynamicTestBeanExtension;
 import org.os890.cdi.addon.dynamictestbean.usecase.AuditService;
 import org.os890.cdi.addon.dynamictestbean.usecase.ConstructorInjectedBean;
 import org.os890.cdi.addon.dynamictestbean.usecase.EventPayload;

@@ -117,6 +117,63 @@ check the test output to see which types were mocked.
 The mock beans implement `PassivationCapable` with a unique ID to satisfy
 CDI container requirements for normal-scoped beans.
 
+## Optional: Custom replacement beans with @TestBean
+
+By default the extension fills unsatisfied injection points with Mockito
+mocks. If you need a hand-crafted implementation instead, declare it as a
+normal CDI bean with `@Alternative` (no `@Priority`) and activate it on
+your test class with `@EnableTestBeans` + `@TestBean`:
+
+```java
+@Alternative
+@ApplicationScoped
+public class CustomGreeting implements Greeting {
+    public String greet(String name) {
+        return "Hello, " + name + "!";
+    }
+}
+
+@EnableTestBeans
+@TestBean(bean = CustomGreeting.class)
+class MyTest { ... }
+```
+
+For producer-based replacements:
+
+```java
+@EnableTestBeans
+@TestBean(beanProducer = TestProducers.class)
+class MyTest { ... }
+```
+
+Multiple `@TestBean` annotations on the same test class:
+
+```java
+@EnableTestBeans
+@TestBean(bean = CustomGreeting.class)
+@TestBean(beanProducer = TestProducers.class)
+class MyTest { ... }
+```
+
+The custom beans define their own scope and qualifiers. The extension:
+
+1. **Vetoes** unselected `@Alternative` beans (prevents their `@Produces`
+   methods from conflicting with mocks)
+2. **Enables** only the alternatives referenced by the active test class
+3. **Mocks** the remaining unsatisfied injection points
+
+Multiple test classes on the same classpath can activate **different
+alternatives for the same type** without conflicts — the internal JUnit
+extension scopes each test class's `@TestBean` declarations independently.
+
+
+### Package structure
+
+| Package | Contents |
+|---------|----------|
+| `org.os890.cdi.addon.dynamictestbean` | **Public API** — `@EnableTestBeans`, `@TestBean`, `@TestBeans` |
+| `org.os890.cdi.addon.dynamictestbean.internal` | Extension internals — do not depend on directly |
+
 ## Third-party CDI extension compatibility
 
 The addon is built exclusively on the standard CDI API — it has **no

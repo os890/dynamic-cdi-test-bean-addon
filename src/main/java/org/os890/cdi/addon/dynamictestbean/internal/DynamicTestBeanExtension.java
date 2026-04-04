@@ -15,7 +15,9 @@
  * limitations under the License.
  */
 
-package org.os890.cdi.addon.dynamictestbean;
+package org.os890.cdi.addon.dynamictestbean.internal;
+
+import org.os890.cdi.addon.dynamictestbean.TestBean;
 
 import jakarta.annotation.Priority;
 import jakarta.enterprise.context.RequestScoped;
@@ -23,7 +25,10 @@ import jakarta.enterprise.context.spi.CreationalContext;
 import jakarta.enterprise.event.Observes;
 import jakarta.enterprise.inject.Any;
 import jakarta.enterprise.inject.Default;
+import jakarta.enterprise.inject.Alternative;
 import jakarta.enterprise.inject.spi.AfterBeanDiscovery;
+import jakarta.enterprise.inject.spi.AfterTypeDiscovery;
+import jakarta.enterprise.inject.spi.ProcessAnnotatedType;
 import jakarta.enterprise.inject.spi.Bean;
 import jakarta.enterprise.inject.spi.BeanManager;
 import jakarta.enterprise.inject.spi.Extension;
@@ -104,6 +109,86 @@ public class DynamicTestBeanExtension implements Extension {
     private final Set<InjectionPointKey> collectedInjectionPoints = new LinkedHashSet<>();
 
     /**
+     * <strong>Phase -1 — Veto unselected {@code @Alternative} beans.</strong>
+     *
+     * <p>Vetoes {@code @Alternative} beans that are NOT referenced by any
+     * {@link TestBean} annotation on the active test class. This prevents
+     * their {@code @Produces} methods from registering beans that would
+     * conflict with the auto-generated Mockito mocks.</p>
+     *
+     * @param pat the process-annotated-type event
+     * @param <T> the annotated type
+     */
+    <T> void vetoUnselectedAlternatives(@Observes ProcessAnnotatedType<T> pat) {
+        Class<T> javaClass = pat.getAnnotatedType().getJavaClass();
+        if (!javaClass.isAnnotationPresent(Alternative.class)) {
+            return;
+        }
+
+        Class<?> activeTestClass = DynamicTestBeanContext.getActiveTestClass();
+        if (activeTestClass == null) {
+            // No @EnableTestBeans — veto ALL @Alternative beans
+            // (they have no @Priority, so they'd be inactive anyway,
+            // but vetoing prevents their producers from registering)
+            pat.veto();
+            return;
+        }
+
+        // Check if this alternative is selected by the active test class
+        Set<Class<?>> selected = getSelectedAlternatives(activeTestClass);
+        if (!selected.contains(javaClass)) {
+            LOG.info("[DynamicTestBean] Vetoing unselected @Alternative: " + javaClass.getName());
+            pat.veto();
+        }
+    }
+
+    private static Set<Class<?>> getSelectedAlternatives(Class<?> testClass) {
+        Set<Class<?>> selected = new LinkedHashSet<>();
+        for (TestBean tb : testClass.getAnnotationsByType(TestBean.class)) {
+            if (tb.bean() != void.class) {
+                selected.add(tb.bean());
+            }
+            if (tb.beanProducer() != void.class) {
+                selected.add(tb.beanProducer());
+            }
+        }
+        return selected;
+    }
+
+    /**
+     * <strong>Phase 0 — Enable {@link TestBean} alternatives.</strong>
+     *
+     * <p>Reads {@link TestBean} annotations from the active test class
+     * (set by the JUnit extension via {@link DynamicTestBeanContext})
+     * and enables each referenced {@code @Alternative} via
+     * {@link AfterTypeDiscovery#getAlternatives()}. No
+     * {@code ProcessAnnotatedType} or stereotype needed — the JUnit
+     * extension communicates the active test class directly.</p>
+     *
+     * @param atd the after-type-discovery event
+     */
+    void enableTestBeanAlternatives(@Observes AfterTypeDiscovery atd) {
+        Class<?> activeTestClass = DynamicTestBeanContext.getActiveTestClass();
+        if (activeTestClass == null) {
+            return;
+        }
+
+        for (TestBean tb : activeTestClass.getAnnotationsByType(TestBean.class)) {
+            enableAlternative(tb.bean(), activeTestClass, atd);
+            enableAlternative(tb.beanProducer(), activeTestClass, atd);
+        }
+    }
+
+    private void enableAlternative(Class<?> alternative, Class<?> testClass, AfterTypeDiscovery atd) {
+        if (alternative == void.class) {
+            return;
+        }
+        atd.getAlternatives().add(alternative);
+        LOG.info("[DynamicTestBean] Enabled @TestBean alternative: " + alternative.getName()
+                + " (declared on " + testClass.getSimpleName() + ")");
+    }
+
+    /**
      * <strong>Phase 1 — Collect injection points.</strong>
      *
      * <p>Invoked by the CDI container for every injection point in every
@@ -148,12 +233,11 @@ public class DynamicTestBeanExtension implements Extension {
     }
 
     /**
-     * <strong>Phase 2 — Register mock beans for unsatisfied injection points.</strong>
+     * <strong>Phase 2 — Register replacement and mock beans.</strong>
      *
-     * <p>After all beans have been discovered, iterates over the collected
-     * injection points and checks whether each one is satisfied. For every
-     * unsatisfied injection point, a synthetic {@link RequestScoped @RequestScoped}
-     * bean backed by {@link Mockito#mock(Class)} is registered.</p>
+     * <p>First registers any {@link TestBean} replacement classes as
+     * {@code @RequestScoped} CDI beans. Then, for each remaining unsatisfied
+     * injection point, registers a Mockito mock.</p>
      *
      * <p>The {@code @Priority(Integer.MAX_VALUE)} ensures this observer runs
      * <em>after</em> other extensions (e.g. DeltaSpike partial beans) have
@@ -451,22 +535,6 @@ public class DynamicTestBeanExtension implements Extension {
         }
 
         /**
-         * Returns {@code true} if the qualifier set contains any custom qualifier
-         * (i.e. anything other than {@code @Named}, {@code @Default}, or {@code @Any}).
-         */
-        private static boolean hasCustomQualifier(Set<Annotation> qualifiers) {
-            for (Annotation q : qualifiers) {
-                Class<? extends Annotation> type = q.annotationType();
-                if (type != Default.class
-                        && type != Any.class
-                        && type != Named.class) {
-                    return true;
-                }
-            }
-            return false;
-        }
-
-        /**
          * Extracts the bean name from the qualifiers. If a {@code @Named}
          * qualifier is present, its value is used so that the mock matches
          * the injection point. Otherwise falls back to a descriptive default.
@@ -551,6 +619,18 @@ public class DynamicTestBeanExtension implements Extension {
         @Override
         public void destroy(T instance, CreationalContext<T> ctx) {
             ctx.release();
+        }
+
+        private static boolean hasCustomQualifier(Set<Annotation> qualifiers) {
+            for (Annotation q : qualifiers) {
+                Class<? extends Annotation> type = q.annotationType();
+                if (type != Default.class
+                        && type != Any.class
+                        && type != Named.class) {
+                    return true;
+                }
+            }
+            return false;
         }
     }
 }
