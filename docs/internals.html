@@ -1,0 +1,327 @@
+<!--
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+
+      http://www.apache.org/licenses/LICENSE-2.0
+
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Technical Internals &mdash; How the Extension Works Under the Hood</title>
+    <style>
+        :root {
+            --bg: #0f1117; --surface: #161b22; --border: #30363d;
+            --text: #e6edf3; --text-muted: #8b949e;
+            --accent: #58a6ff; --accent-hover: #79c0ff;
+            --green: #3fb950; --orange: #d29922;
+            --code-bg: #1c2128; --code-border: #262c36;
+            --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+            --font-mono: 'JetBrains Mono', 'Fira Code', Consolas, monospace;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html { scroll-behavior: smooth; }
+        body { font-family: var(--font-sans); background: var(--bg); color: var(--text); line-height: 1.7; font-size: 17px; }
+        .topnav { position: sticky; top: 0; z-index: 100; background: var(--surface); border-bottom: 1px solid var(--border); padding: 0.6rem 2rem; display: flex; gap: 1.5rem; justify-content: center; flex-wrap: wrap; font-size: 0.88rem; }
+        .topnav a { color: var(--text-muted); text-decoration: none; padding: 0.2rem 0; }
+        .topnav a:hover { color: var(--accent); }
+        .topnav a.active { color: var(--accent); border-bottom: 2px solid var(--accent); }
+        .hero { background: linear-gradient(135deg,#0d1117,#161b22 50%,#1a1f2b); border-bottom: 1px solid var(--border); padding: 5rem 2rem 4rem; text-align: center; }
+        .hero h1 { font-size: clamp(2rem,5vw,3rem); font-weight: 800; letter-spacing: -0.03em; line-height: 1.2; margin-bottom: 1.2rem; }
+        .hero h1 span { color: var(--accent); }
+        .hero .subtitle { font-size: 1.15rem; color: var(--text-muted); max-width: 640px; margin: 0 auto; }
+        .content { max-width: 820px; margin: 0 auto; padding: 3rem 2rem 5rem; }
+        h2 { font-size: 1.8rem; font-weight: 700; letter-spacing: -0.02em; margin: 3.5rem 0 1rem; padding-bottom: 0.5rem; border-bottom: 1px solid var(--border); }
+        h3 { font-size: 1.25rem; font-weight: 600; margin: 2rem 0 0.8rem; color: var(--accent); }
+        p { margin-bottom: 1rem; }
+        a { color: var(--accent); text-decoration: none; } a:hover { color: var(--accent-hover); text-decoration: underline; }
+        strong { color: #f0f6fc; }
+        pre { background: var(--code-bg); border: 1px solid var(--code-border); border-radius: 8px; padding: 1.2rem 1.4rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.88rem; line-height: 1.6; }
+        code { font-family: var(--font-mono); }
+        p code, li code, td code { background: var(--code-bg); border: 1px solid var(--code-border); border-radius: 4px; padding: 0.15em 0.4em; font-size: 0.9em; }
+        .kw { color: #ff7b72; } .ty { color: #79c0ff; } .fn { color: #d2a8ff; } .st { color: #a5d6ff; } .cm { color: #8b949e; font-style: italic; } .an { color: #ffa657; }
+        ul, ol { margin: 0.5rem 0 1.5rem 1.5rem; } li { margin-bottom: 0.4rem; color: var(--text-muted); } li strong { color: var(--text); }
+        .callout { background: var(--surface); border: 1px solid var(--border); border-left: 4px solid var(--accent); border-radius: 8px; padding: 1rem 1.4rem; margin: 1.5rem 0; font-size: 0.95rem; color: var(--text-muted); }
+        .callout strong { color: var(--accent); }
+        table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.95rem; }
+        th { text-align: left; padding: 0.7rem 1rem; background: var(--surface); border: 1px solid var(--border); font-weight: 600; }
+        td { padding: 0.6rem 1rem; border: 1px solid var(--border); color: var(--text-muted); }
+        .card-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin: 1.5rem 0; }
+        .card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 1.2rem; }
+        .card h4 { font-size: 0.95rem; font-weight: 600; margin-bottom: 0.4rem; color: var(--text); }
+        .card p { font-size: 0.88rem; color: var(--text-muted); margin: 0; line-height: 1.5; }
+        footer { text-align: center; padding: 2rem; color: var(--text-muted); font-size: 0.85rem; border-top: 1px solid var(--border); }
+        footer a { color: var(--accent); }
+        @media (max-width: 600px) { .hero { padding: 3rem 1.2rem 2.5rem; } .content { padding: 2rem 1.2rem 3rem; } pre { font-size: 0.8rem; padding: 1rem; } .topnav { padding: 0.5rem 1rem; gap: 1rem; font-size: 0.8rem; } }
+    </style>
+</head>
+<body>
+
+<nav class="topnav">
+    <a href="index.html">Auto-Mocking</a>
+    <a href="testbean.html">@TestBean Basics</a>
+    <a href="testbean-advanced.html">Advanced Features</a>
+    <a href="internals.html" class="active">Internals</a>
+    <a href="https://github.com/os890/dynamic-cdi-test-bean-addon">GitHub</a>
+</nav>
+
+<section class="hero">
+    <h1>
+        <span>Technical Internals</span><br>
+        How the Extension Works Under the Hood
+    </h1>
+    <p class="subtitle">
+        CDI lifecycle hooks, JUnit integration, alternative isolation,
+        and the mock bean implementation.
+    </p>
+</section>
+
+<main class="content">
+
+<!-- ======== Auto-Mocking Internals ======== -->
+<h2>Auto-Mocking: CDI Lifecycle Hooks</h2>
+
+<p>
+    The extension uses three CDI lifecycle events to discover unsatisfied
+    injection points and fill them with Mockito mocks.
+</p>
+
+<h3>1. Collecting injection points</h3>
+
+<pre><code><span class="kw">&lt;T&gt;</span> <span class="kw">void</span> <span class="fn">collectInjectionPoints</span>(<span class="an">@Observes</span> <span class="ty">ProcessInjectionPoint</span>&lt;?, T&gt; pip) {
+    <span class="cm">// Records the type and qualifiers of every injection point</span>
+}
+
+<span class="kw">&lt;T&gt;</span> <span class="kw">void</span> <span class="fn">collectFromBean</span>(<span class="an">@Observes</span> <span class="ty">ProcessBean</span>&lt;T&gt; pb) {
+    <span class="cm">// Catches inherited generic injection points that some</span>
+    <span class="cm">// implementations miss in ProcessInjectionPoint</span>
+}</code></pre>
+
+<p>
+    The <code>ProcessBean</code> observer is critical for
+    <strong>OpenWebBeans compatibility</strong> &mdash; OWB does not always
+    fire <code>ProcessInjectionPoint</code> for inherited generic fields
+    like <code>BaseDao&lt;E&gt;</code> in an abstract superclass.
+</p>
+
+<h3>2. Registering beans and mocks</h3>
+
+<p>During <code>AfterBeanDiscovery</code>, the extension registers (in order):</p>
+
+<ol>
+    <li><strong>Test class</strong> as a <code>@Singleton</code> bean
+        (if <code>addTestClass = true</code>)</li>
+    <li><strong>Inline <code>@Produces @TestBean</code> fields</strong>
+        from the active test class &mdash; static field values become
+        <code>@Singleton</code> beans</li>
+    <li><strong>Mockito mocks</strong> for remaining unsatisfied injection
+        points (skipping types already covered by inline fields,
+        <code>@TestBean</code> alternatives, or third-party extensions)</li>
+</ol>
+
+<h3>MockBean properties</h3>
+
+<div class="card-grid">
+    <div class="card">
+        <h4>PassivationCapable</h4>
+        <p>Unique ID per bean type, satisfying Weld's requirement for normal-scoped beans.</p>
+    </div>
+    <div class="card">
+        <h4>Qualifier-Aware</h4>
+        <p>Carries exact qualifiers from the injection point. Follows CDI spec rules for <code>@Default</code>.</p>
+    </div>
+    <div class="card">
+        <h4>@Nonbinding Support</h4>
+        <p>Qualifier comparison uses reflection to skip <code>@Nonbinding</code> members.</p>
+    </div>
+    <div class="card">
+        <h4>@Named Support</h4>
+        <p>Returns the <code>@Named</code> value as the bean name when present.</p>
+    </div>
+</div>
+
+<!-- ======== @TestBean Internals ======== -->
+<h2>@TestBean: Alternative Isolation</h2>
+
+<p>
+    When <code>@EnableTestBeans</code> is present, the extension adds three
+    more CDI lifecycle phases before auto-mocking:
+</p>
+
+<h3>Phase -2: Force discovery of scope-less alternatives</h3>
+
+<p>
+    During <code>BeforeBeanDiscovery</code>, if a <code>@TestBean</code>-referenced
+    class has <code>@Alternative</code> but no scope annotation, the extension
+    calls <code>addAnnotatedType()</code> to force CDI to discover it in
+    <code>bean-discovery-mode="annotated"</code>, then adds <code>@Dependent</code>
+    as the default scope.
+</p>
+
+<h3>Phase -1: Veto conflicting alternatives</h3>
+
+<p>
+    During <code>ProcessAnnotatedType</code>, the extension checks each
+    <code>@Alternative</code> bean against the <code>@TestBean</code> set.
+    Bean types are resolved respecting <code>@Typed</code> on both the
+    candidate and the selected alternatives:
+</p>
+
+<ul>
+    <li><strong>Selected by @TestBean</strong> &mdash; kept. If it has no
+        scope, <code>@Dependent</code> is added.</li>
+    <li><strong>Not selected, bean types clash</strong> with a
+        <code>@TestBean</code>-declared alternative &mdash; vetoed
+        (regardless of <code>@Priority</code>).</li>
+    <li><strong>Not selected, no type clash</strong> &mdash; left alone.
+        This includes alternatives enabled via <code>@Priority</code>
+        or <code>beans.xml</code> for unrelated types.</li>
+    <li><strong>No active test class</strong> &mdash; alternatives without
+        <code>@Priority</code> are vetoed (inactive anyway, prevents
+        producer conflicts). <code>@Priority</code> alternatives are
+        untouched.</li>
+</ul>
+
+<p>
+    In whitelist mode (<code>limitToTestBeans = true</code>), ALL
+    application beans are vetoed except the whitelisted ones.
+</p>
+
+<h3>Phase 0: Enable selected alternatives</h3>
+
+<p>
+    During <code>AfterTypeDiscovery</code>, the extension reads
+    <code>@TestBean</code> annotations from the active test class &mdash;
+    recursively walking meta-annotations &mdash; and enables each referenced
+    alternative via <code>getAlternatives().add()</code>.
+</p>
+
+<div class="callout">
+    <strong>No @Priority needed.</strong> Alternatives are enabled
+    programmatically per container bootstrap. Different test classes can
+    activate different alternatives for the same type without conflicts.
+    Other alternatives &mdash; whether enabled via <code>@Priority</code>
+    or <code>beans.xml</code> &mdash; work normally as long as their
+    bean types don't overlap with a <code>@TestBean</code> replacement.
+</div>
+
+<!-- ======== JUnit Integration ======== -->
+<h2>JUnit Integration</h2>
+
+<p>
+    <code>@EnableTestBeans</code> carries <code>@ExtendWith</code> for the
+    internal JUnit extension. The lifecycle:
+</p>
+
+<table>
+    <thead>
+        <tr><th>JUnit Phase</th><th>Action</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><code>beforeAll</code></td>
+            <td>Sets active test class in <code>DynamicTestBeanContext</code>.
+                If <code>manageContainer = true</code>, starts the CDI SE container.</td>
+        </tr>
+        <tr>
+            <td><code>beforeEach</code></td>
+            <td>Activates request scope via <code>RequestContextController</code>.</td>
+        </tr>
+        <tr>
+            <td><code>postProcessTestInstance</code></td>
+            <td>Injects <code>@Inject</code> fields on the test instance using
+                <code>BeanManager.getInjectionTargetFactory()</code>.</td>
+        </tr>
+        <tr>
+            <td><code>afterEach</code></td>
+            <td>Deactivates request scope.</td>
+        </tr>
+        <tr>
+            <td><code>afterAll</code></td>
+            <td>Shuts down the CDI container. Resets <code>DynamicTestBeanContext</code>.</td>
+        </tr>
+    </tbody>
+</table>
+
+<!-- ======== Meta-Annotation Resolution ======== -->
+<h2>Meta-Annotation Resolution</h2>
+
+<p>
+    <code>@TestBean</code> declarations are collected recursively from the
+    test class's annotation hierarchy. The algorithm:
+</p>
+
+<ol>
+    <li>Read all annotations on the test class</li>
+    <li>For each <code>@TestBean</code> or <code>@TestBeans</code>, collect
+        the <code>bean</code> and <code>beanProducer</code> references</li>
+    <li>For each non-JDK/non-CDI annotation, recurse into its meta-annotations</li>
+    <li>Track visited annotation types to prevent infinite loops</li>
+    <li>Collect into a <code>Set&lt;Class&lt;?&gt;&gt;</code> &mdash;
+        duplicates are automatically deduplicated</li>
+</ol>
+
+<!-- ======== Third-Party Compatibility ======== -->
+<h2>Third-Party Extension Compatibility</h2>
+
+<p>
+    The extension detects types managed by third-party CDI extensions and
+    skips mocking them. Currently recognized:
+</p>
+
+<ul>
+    <li><strong>Apache DeltaSpike</strong> &mdash; types whose annotations
+        carry <code>@PartialBeanBinding</code> are skipped. Detection uses
+        annotation name strings to avoid compile-time dependencies.</li>
+</ul>
+
+<!-- ======== Package Structure ======== -->
+<h2>Package Structure</h2>
+
+<table>
+    <thead>
+        <tr><th>Package</th><th>Contents</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><code>org.os890.cdi.addon.dynamictestbean</code></td>
+            <td><strong>Public API</strong> &mdash; <code>@EnableTestBeans</code>,
+                <code>@TestBean</code>, <code>@TestBeans</code></td>
+        </tr>
+        <tr>
+            <td><code>org.os890.cdi.addon.dynamictestbean.internal</code></td>
+            <td>Extension internals &mdash; <code>DynamicTestBeanExtension</code>,
+                <code>DynamicTestBeanJUnitExtension</code>,
+                <code>DynamicTestBeanContext</code></td>
+        </tr>
+    </tbody>
+</table>
+
+</main>
+
+<footer>
+    <p>
+        <a href="https://github.com/os890/dynamic-cdi-test-bean-addon">Source on GitHub</a>
+        &nbsp;&middot;&nbsp;
+        <a href="https://www.apache.org/licenses/LICENSE-2.0">Apache License 2.0</a>
+    </p>
+    <p>
+        This is the first CDI extension from
+        <a href="https://github.com/os890">os890</a> created entirely in an
+        agentic AI workflow (Claude, Anthropic).
+    </p>
+</footer>
+
+</body>
+</html>

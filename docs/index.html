@@ -1,0 +1,554 @@
+<!--
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+
+      http://www.apache.org/licenses/LICENSE-2.0
+
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dynamic CDI Test Bean Addon &mdash; Auto-Mock Unsatisfied CDI Injection Points</title>
+    <style>
+        :root {
+            --bg: #0f1117;
+            --surface: #161b22;
+            --border: #30363d;
+            --text: #e6edf3;
+            --text-muted: #8b949e;
+            --accent: #58a6ff;
+            --accent-hover: #79c0ff;
+            --green: #3fb950;
+            --red: #f85149;
+            --orange: #d29922;
+            --code-bg: #1c2128;
+            --code-border: #262c36;
+            --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+            --font-mono: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', Consolas, monospace;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        html { scroll-behavior: smooth; }
+
+        body {
+            font-family: var(--font-sans);
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.7;
+            font-size: 17px;
+        }
+
+        /* ---- Hero ---- */
+        .hero {
+            background: linear-gradient(135deg, #0d1117 0%, #161b22 50%, #1a1f2b 100%);
+            border-bottom: 1px solid var(--border);
+            padding: 5rem 2rem 4rem;
+            text-align: center;
+        }
+
+        .hero h1 {
+            font-size: clamp(2rem, 5vw, 3.2rem);
+            font-weight: 800;
+            letter-spacing: -0.03em;
+            line-height: 1.2;
+            margin-bottom: 1.2rem;
+        }
+
+        .hero h1 span { color: var(--accent); }
+
+        .hero .subtitle {
+            font-size: 1.2rem;
+            color: var(--text-muted);
+            max-width: 640px;
+            margin: 0 auto 2.5rem;
+        }
+
+        .hero .badge-row {
+            display: flex;
+            gap: 0.6rem;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 0.3rem 0.8rem;
+            border-radius: 999px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            letter-spacing: 0.02em;
+            border: 1px solid var(--border);
+            background: var(--surface);
+            color: var(--text-muted);
+        }
+
+        .badge.green  { border-color: #238636; color: var(--green); }
+        .badge.blue   { border-color: #1f6feb; color: var(--accent); }
+        .badge.orange { border-color: #9e6a03; color: var(--orange); }
+
+        /* ---- Content ---- */
+        .content {
+            max-width: 820px;
+            margin: 0 auto;
+            padding: 3rem 2rem 5rem;
+        }
+
+        h2 {
+            font-size: 1.8rem;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+            margin: 3.5rem 0 1rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 1px solid var(--border);
+        }
+
+        h3 {
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin: 2rem 0 0.8rem;
+            color: var(--accent);
+        }
+
+        p { margin-bottom: 1rem; }
+
+        a {
+            color: var(--accent);
+            text-decoration: none;
+        }
+
+        a:hover { color: var(--accent-hover); text-decoration: underline; }
+
+        strong { color: #f0f6fc; }
+
+        /* ---- Code ---- */
+        pre {
+            background: var(--code-bg);
+            border: 1px solid var(--code-border);
+            border-radius: 8px;
+            padding: 1.2rem 1.4rem;
+            overflow-x: auto;
+            margin: 1rem 0 1.5rem;
+            font-size: 0.88rem;
+            line-height: 1.6;
+        }
+
+        code {
+            font-family: var(--font-mono);
+        }
+
+        p code, li code, td code {
+            background: var(--code-bg);
+            border: 1px solid var(--code-border);
+            border-radius: 4px;
+            padding: 0.15em 0.4em;
+            font-size: 0.9em;
+        }
+
+        /* Syntax highlights */
+        .kw { color: #ff7b72; }
+        .ty { color: #79c0ff; }
+        .fn { color: #d2a8ff; }
+        .st { color: #a5d6ff; }
+        .cm { color: #8b949e; font-style: italic; }
+        .an { color: #ffa657; }
+        .nr { color: #79c0ff; }
+
+        /* ---- Error block ---- */
+        .error-block {
+            background: #1c1012;
+            border: 1px solid #5c2022;
+            border-left: 4px solid var(--red);
+            border-radius: 8px;
+            padding: 1.2rem 1.4rem;
+            margin: 1rem 0 1.5rem;
+            font-family: var(--font-mono);
+            font-size: 0.88rem;
+            color: #f8837a;
+            overflow-x: auto;
+        }
+
+        /* ---- Log block ---- */
+        .log-block {
+            background: #0f1a0f;
+            border: 1px solid #1a4d1a;
+            border-left: 4px solid var(--green);
+            border-radius: 8px;
+            padding: 1.2rem 1.4rem;
+            margin: 1rem 0 1.5rem;
+            font-family: var(--font-mono);
+            font-size: 0.88rem;
+            color: #7ee787;
+            overflow-x: auto;
+        }
+
+        /* ---- Tables ---- */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1rem 0 1.5rem;
+            font-size: 0.95rem;
+        }
+
+        th {
+            text-align: left;
+            padding: 0.7rem 1rem;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            font-weight: 600;
+            color: var(--text);
+        }
+
+        td {
+            padding: 0.6rem 1rem;
+            border: 1px solid var(--border);
+            color: var(--text-muted);
+        }
+
+        tr:hover td { background: rgba(88, 166, 255, 0.04); }
+
+        td.yes { color: var(--green); font-weight: 600; }
+        td.no  { color: var(--text-muted); }
+
+        /* ---- Lists ---- */
+        ul, ol {
+            margin: 0.5rem 0 1.5rem 1.5rem;
+        }
+
+        li {
+            margin-bottom: 0.4rem;
+            color: var(--text-muted);
+        }
+
+        li strong { color: var(--text); }
+
+        /* ---- Steps ---- */
+        .steps {
+            counter-reset: step;
+            list-style: none;
+            margin-left: 0;
+            padding: 0;
+        }
+
+        .steps li {
+            counter-increment: step;
+            position: relative;
+            padding-left: 3rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .steps li::before {
+            content: counter(step);
+            position: absolute;
+            left: 0;
+            top: 0.1em;
+            width: 2rem;
+            height: 2rem;
+            background: var(--accent);
+            color: var(--bg);
+            font-weight: 700;
+            font-size: 0.9rem;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* ---- Cards ---- */
+        .card-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 1rem;
+            margin: 1.5rem 0;
+        }
+
+        .card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 1.2rem;
+        }
+
+        .card h4 {
+            font-size: 0.95rem;
+            font-weight: 600;
+            margin-bottom: 0.4rem;
+            color: var(--text);
+        }
+
+        .card p {
+            font-size: 0.88rem;
+            color: var(--text-muted);
+            margin: 0;
+            line-height: 1.5;
+        }
+
+        /* ---- Callout ---- */
+        .callout {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-left: 4px solid var(--accent);
+            border-radius: 8px;
+            padding: 1rem 1.4rem;
+            margin: 1.5rem 0;
+            font-size: 0.95rem;
+            color: var(--text-muted);
+        }
+
+        .callout strong { color: var(--accent); }
+
+        /* ---- Footer ---- */
+        footer {
+            text-align: center;
+            padding: 2rem;
+            color: var(--text-muted);
+            font-size: 0.85rem;
+            border-top: 1px solid var(--border);
+        }
+
+        footer a { color: var(--accent); }
+
+        /* ---- Top nav ---- */
+        .topnav {
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            background: var(--surface);
+            border-bottom: 1px solid var(--border);
+            padding: 0.6rem 2rem;
+            display: flex;
+            gap: 1.5rem;
+            justify-content: center;
+            flex-wrap: wrap;
+            font-size: 0.88rem;
+        }
+
+        .topnav a {
+            color: var(--text-muted);
+            text-decoration: none;
+            padding: 0.2rem 0;
+        }
+
+        .topnav a:hover { color: var(--accent); }
+        .topnav a.active { color: var(--accent); border-bottom: 2px solid var(--accent); }
+
+        /* ---- Responsive ---- */
+        @media (max-width: 600px) {
+            .hero { padding: 3rem 1.2rem 2.5rem; }
+            .content { padding: 2rem 1.2rem 3rem; }
+            pre { font-size: 0.8rem; padding: 1rem; }
+            .topnav { padding: 0.5rem 1rem; gap: 1rem; font-size: 0.8rem; }
+        }
+    </style>
+</head>
+<body>
+
+<nav class="topnav">
+    <a href="index.html" class="active">Auto-Mocking</a>
+    <a href="testbean.html">@TestBean Basics</a>
+    <a href="testbean-advanced.html">Advanced Features</a>
+    <a href="internals.html">Internals</a>
+    <a href="https://github.com/os890/dynamic-cdi-test-bean-addon">GitHub</a>
+</nav>
+
+<!-- ============================================================ Hero -->
+<section class="hero">
+    <h1>
+        <span>Dynamic CDI Test Bean Addon</span><br>
+        Auto-Mock Unsatisfied CDI Injection Points
+    </h1>
+    <p class="subtitle">
+        A CDI portable extension that fills missing beans with Mockito mocks
+        at bootstrap. One test dependency. Zero configuration.
+    </p>
+    <div class="badge-row">
+        <span class="badge blue">CDI 4.1</span>
+        <span class="badge green">Mockito 5</span>
+        <span class="badge orange">JUnit 6</span>
+        <span class="badge">Java 25+</span>
+        <span class="badge">Apache License 2.0</span>
+    </div>
+</section>
+
+<!-- ============================================================ Content -->
+<main class="content">
+
+<!-- ---- The Problem ---- -->
+<h2>The Problem</h2>
+
+<p>
+    Multi-module CDI projects fail to start in isolated module tests:
+</p>
+
+<div class="error-block">
+WELD-001408: Unsatisfied dependencies for type BaseDao&lt;DummyEntity&gt;<br>
+&nbsp;&nbsp;at injection point [BackedAnnotatedField] @Inject private BaseService.dao
+</div>
+
+<p>
+    Your module injects interfaces or abstract types whose implementations
+    live in a different module. Production assembles everything. Your
+    isolated module test doesn't.
+</p>
+
+<!-- ---- The Fix ---- -->
+<h2>The Fix</h2>
+
+<ol class="steps">
+    <li>
+        <strong>Add one dependency:</strong>
+<pre><code><span class="kw">&lt;dependency&gt;</span>
+    <span class="kw">&lt;groupId&gt;</span><span class="st">org.os890.cdi.addon</span><span class="kw">&lt;/groupId&gt;</span>
+    <span class="kw">&lt;artifactId&gt;</span><span class="st">dynamic-cdi-test-bean-addon</span><span class="kw">&lt;/artifactId&gt;</span>
+    <span class="kw">&lt;version&gt;</span><span class="st">1.0.0-SNAPSHOT</span><span class="kw">&lt;/version&gt;</span>
+    <span class="kw">&lt;scope&gt;</span><span class="st">test</span><span class="kw">&lt;/scope&gt;</span>
+<span class="kw">&lt;/dependency&gt;</span></code></pre>
+    </li>
+    <li>
+        <strong>A typical bean in your common module:</strong>
+
+<pre><code><span class="cm">// common/src/main/java</span>
+<span class="an">@ApplicationScoped</span>
+<span class="kw">public class</span> <span class="ty">BaseService</span>&lt;<span class="ty">E</span> <span class="kw">extends</span> <span class="ty">BaseEntity</span>&gt; {
+
+    <span class="an">@Inject</span>
+    <span class="kw">private</span> <span class="ty">BaseDao</span>&lt;<span class="ty">E</span>&gt; dao;          <span class="cm">// abstract — impls in app modules</span>
+
+    <span class="an">@Inject</span>
+    <span class="kw">private</span> <span class="ty">UserContext</span> userContext;  <span class="cm">// interface — impl in auth module</span>
+
+    <span class="kw">public boolean</span> <span class="fn">isReady</span>() {
+        <span class="kw">return</span> dao != <span class="kw">null</span>;
+    }
+
+    <span class="kw">public</span> <span class="ty">String</span> <span class="fn">getEntityName</span>() {
+        <span class="cm">// ... derived from E</span>
+    }
+
+    <span class="kw">public</span> <span class="ty">E</span> <span class="fn">findById</span>(<span class="kw">long</span> id) {
+        <span class="kw">return</span> dao.<span class="fn">findById</span>(id);
+    }
+}</code></pre>
+
+<div class="callout">
+    <strong>Without the addon, both injection points fail:</strong><br>
+    <code>BaseDao&lt;E&gt;</code> &mdash; abstract class, concrete
+    implementations exist only in app modules.<br>
+    <code>UserContext</code> &mdash; interface defined in
+    <code>common</code>, but the implementation lives in the
+    <code>auth</code> module.<br>
+    The addon auto-mocks both so the container starts.
+</div>
+    </li>
+    <li>
+        <strong>Test it &mdash; without a database or auth module:</strong>
+
+<pre><code><span class="cm">// common/src/test/java</span>
+
+<span class="an">@EnableTestBeans</span>
+<span class="kw">class</span> <span class="ty">BaseServiceTest</span> {
+
+    <span class="an">@Inject</span>
+    <span class="ty">BaseService</span>&lt;<span class="ty">DummyEntity</span>&gt; service;  <span class="cm">// real bean in common</span>
+
+    <span class="an">@Test</span>
+    <span class="kw">void</span> <span class="fn">serviceStartsWithoutAppModules</span>() {
+        <span class="cm">// BaseService is a real common-module bean.</span>
+        <span class="cm">// BaseDao and UserContext have no impl here —</span>
+        <span class="cm">// the extension auto-mocked both with Mockito.</span>
+        <span class="fn">assertNotNull</span>(service);
+        <span class="fn">assertTrue</span>(service.<span class="fn">isReady</span>());
+    }
+
+    <span class="an">@Test</span>
+    <span class="kw">void</span> <span class="fn">serviceLogicWorksWithoutDao</span>() {
+        <span class="cm">// Logic that doesn't touch the DAO works normally.</span>
+        <span class="fn">assertEquals</span>(<span class="st">"DummyEntity"</span>, service.<span class="fn">getEntityName</span>());
+    }
+
+    <span class="an">@Test</span>
+    <span class="kw">void</span> <span class="fn">daoCallsReturnMockitoDefaults</span>() {
+        <span class="cm">// Calls that go through the mocked DAO return null.</span>
+        <span class="fn">assertNull</span>(service.<span class="fn">findById</span>(<span class="nr">1L</span>));
+    }
+}</code></pre>
+    </li>
+</ol>
+
+<p>
+    <code>BaseService&lt;E&gt;</code> is a real bean in <code>common</code>.
+    It injects <code>BaseDao&lt;E&gt;</code> (abstract &mdash; concrete
+    implementations live in app modules) and <code>UserContext</code>
+    (just an interface &mdash; the <code>auth</code> module provides the
+    implementation). Both are auto-mocked with Mockito so you can test
+    the service's own logic in isolation. No <code>@BeforeAll</code>, no
+    <code>SeContainerInitializer</code>, no manual mock wiring.
+    Need a real <code>UserContext</code> instead of a mock?
+    See <a href="testbean.html">@TestBean</a>.
+</p>
+
+<div class="log-block">
+[DynamicTestBean] Registering mock for: BaseDao&lt;DummyEntity&gt;<br>
+[DynamicTestBean] Registering mock for: UserContext<br>
+[DynamicTestBean] Registered 2 mock bean(s) for unsatisfied injection points.
+</div>
+
+<!-- ---- What's Next ---- -->
+<h2>What's Next</h2>
+
+<p>Auto-mocking gets the container started. When you need more control:</p>
+
+<ul>
+    <li><a href="testbean.html"><strong>@TestBean</strong></a> &mdash;
+        replace specific mocks with hand-crafted <code>@Alternative</code>
+        beans, per test class</li>
+    <li><a href="testbean-advanced.html"><strong>Advanced Features</strong></a> &mdash;
+        inline producer fields, whitelist mode, composable meta-annotations</li>
+    <li><a href="internals.html"><strong>Internals</strong></a> &mdash;
+        CDI lifecycle hooks, JUnit integration, implementation details</li>
+</ul>
+
+<div class="callout">
+    <strong>Built on the standard CDI API only.</strong> Works with both
+    OpenWebBeans and Weld. No vendor lock-in. Compatible with DeltaSpike.
+    Tested with 64 tests on every build.
+</div>
+
+<div class="callout">
+    <strong>Using Claude Code?</strong> A
+    <a href="claude-skill.md">custom skill</a> is included. Copy it to
+    <code>.claude/skills/cdi-test/SKILL.md</code> in your project and
+    use <code>/cdi-test</code> to generate CDI tests with auto-mocking
+    and <code>@TestBean</code> support.
+</div>
+
+</main>
+
+<!-- ============================================================ Footer -->
+<footer>
+    <p>
+        <a href="https://github.com/os890/dynamic-cdi-test-bean-addon">Source on GitHub</a>
+        &nbsp;&middot;&nbsp;
+        <a href="https://www.apache.org/licenses/LICENSE-2.0">Apache License 2.0</a>
+    </p>
+    <p>
+        This is the first CDI extension from
+        <a href="https://github.com/os890">os890</a> created entirely in an
+        agentic AI workflow (Claude, Anthropic) &mdash; extension, test suite,
+        build configuration, and documentation.
+    </p>
+</footer>
+
+</body>
+</html>

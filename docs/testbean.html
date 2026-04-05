@@ -1,0 +1,370 @@
+<!--
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+
+      http://www.apache.org/licenses/LICENSE-2.0
+
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>@EnableTestBeans &mdash; Custom Test Implementations Without @Priority</title>
+    <style>
+        :root {
+            --bg: #0f1117;
+            --surface: #161b22;
+            --border: #30363d;
+            --text: #e6edf3;
+            --text-muted: #8b949e;
+            --accent: #58a6ff;
+            --accent-hover: #79c0ff;
+            --green: #3fb950;
+            --orange: #d29922;
+            --code-bg: #1c2128;
+            --code-border: #262c36;
+            --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+            --font-mono: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', Consolas, monospace;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html { scroll-behavior: smooth; }
+
+        body {
+            font-family: var(--font-sans);
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.7;
+            font-size: 17px;
+        }
+
+        .hero {
+            background: linear-gradient(135deg, #0d1117 0%, #161b22 50%, #1a1f2b 100%);
+            border-bottom: 1px solid var(--border);
+            padding: 5rem 2rem 4rem;
+            text-align: center;
+        }
+
+        .hero h1 {
+            font-size: clamp(2rem, 5vw, 3rem);
+            font-weight: 800;
+            letter-spacing: -0.03em;
+            line-height: 1.2;
+            margin-bottom: 1.2rem;
+        }
+
+        .hero h1 span { color: var(--accent); }
+
+        .hero .subtitle {
+            font-size: 1.15rem;
+            color: var(--text-muted);
+            max-width: 640px;
+            margin: 0 auto 2rem;
+        }
+
+        .content {
+            max-width: 820px;
+            margin: 0 auto;
+            padding: 3rem 2rem 5rem;
+        }
+
+        h2 {
+            font-size: 1.8rem;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+            margin: 3.5rem 0 1rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 1px solid var(--border);
+        }
+
+        h3 {
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin: 2rem 0 0.8rem;
+            color: var(--accent);
+        }
+
+        p { margin-bottom: 1rem; }
+        a { color: var(--accent); text-decoration: none; }
+        a:hover { color: var(--accent-hover); text-decoration: underline; }
+        strong { color: #f0f6fc; }
+
+        pre {
+            background: var(--code-bg);
+            border: 1px solid var(--code-border);
+            border-radius: 8px;
+            padding: 1.2rem 1.4rem;
+            overflow-x: auto;
+            margin: 1rem 0 1.5rem;
+            font-size: 0.88rem;
+            line-height: 1.6;
+        }
+
+        code { font-family: var(--font-mono); }
+
+        p code, li code, td code {
+            background: var(--code-bg);
+            border: 1px solid var(--code-border);
+            border-radius: 4px;
+            padding: 0.15em 0.4em;
+            font-size: 0.9em;
+        }
+
+        .kw { color: #ff7b72; }
+        .ty { color: #79c0ff; }
+        .fn { color: #d2a8ff; }
+        .st { color: #a5d6ff; }
+        .cm { color: #8b949e; font-style: italic; }
+        .an { color: #ffa657; }
+
+        ul, ol { margin: 0.5rem 0 1.5rem 1.5rem; }
+        li { margin-bottom: 0.4rem; color: var(--text-muted); }
+        li strong { color: var(--text); }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1rem 0 1.5rem;
+            font-size: 0.95rem;
+        }
+
+        th {
+            text-align: left;
+            padding: 0.7rem 1rem;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            font-weight: 600;
+        }
+
+        td {
+            padding: 0.6rem 1rem;
+            border: 1px solid var(--border);
+            color: var(--text-muted);
+        }
+
+        .callout {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-left: 4px solid var(--accent);
+            border-radius: 8px;
+            padding: 1rem 1.4rem;
+            margin: 1.5rem 0;
+            font-size: 0.95rem;
+            color: var(--text-muted);
+        }
+
+        .callout strong { color: var(--accent); }
+
+        .steps {
+            counter-reset: step;
+            list-style: none;
+            margin-left: 0;
+            padding: 0;
+        }
+
+        .steps li {
+            counter-increment: step;
+            position: relative;
+            padding-left: 3rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .steps li::before {
+            content: counter(step);
+            position: absolute;
+            left: 0;
+            top: 0.1em;
+            width: 2rem;
+            height: 2rem;
+            background: var(--accent);
+            color: var(--bg);
+            font-weight: 700;
+            font-size: 0.9rem;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        footer {
+            text-align: center;
+            padding: 2rem;
+            color: var(--text-muted);
+            font-size: 0.85rem;
+            border-top: 1px solid var(--border);
+        }
+
+        footer a { color: var(--accent); }
+
+        /* ---- Top nav ---- */
+        .topnav {
+            position: sticky; top: 0; z-index: 100;
+            background: var(--surface); border-bottom: 1px solid var(--border);
+            padding: 0.6rem 2rem; display: flex; gap: 1.5rem;
+            justify-content: center; flex-wrap: wrap; font-size: 0.88rem;
+        }
+        .topnav a { color: var(--text-muted); text-decoration: none; padding: 0.2rem 0; }
+        .topnav a:hover { color: var(--accent); }
+        .topnav a.active { color: var(--accent); border-bottom: 2px solid var(--accent); }
+
+        @media (max-width: 600px) {
+            .hero { padding: 3rem 1.2rem 2.5rem; }
+            .content { padding: 2rem 1.2rem 3rem; }
+            pre { font-size: 0.8rem; padding: 1rem; }
+            .topnav { padding: 0.5rem 1rem; gap: 1rem; font-size: 0.8rem; }
+        }
+    </style>
+</head>
+<body>
+
+<nav class="topnav">
+    <a href="index.html">Auto-Mocking</a>
+    <a href="testbean.html" class="active">@TestBean Basics</a>
+    <a href="testbean-advanced.html">Advanced Features</a>
+    <a href="internals.html">Internals</a>
+    <a href="https://github.com/os890/dynamic-cdi-test-bean-addon">GitHub</a>
+</nav>
+
+<section class="hero">
+    <h1>
+        <span>@TestBean</span><br>
+        Replace Mocks With Real Implementations
+    </h1>
+    <p class="subtitle">
+        Auto-mocking gets the container started. <code>@TestBean</code> lets you
+        swap specific mocks for hand-crafted replacements &mdash; per test class,
+        no <code>@Priority</code>, no global side effects.
+    </p>
+</section>
+
+<main class="content">
+
+<h2>When Mocks Aren't Enough</h2>
+
+<p>
+    <a href="index.html">Auto-mocking</a> gets the container started. But
+    sometimes a Mockito mock isn't what you need &mdash; you want a real
+    implementation that records calls, returns computed values, or validates
+    inputs.
+</p>
+
+<p>
+    CDI has <code>@Alternative</code> for exactly this. With
+    <code>@Priority</code>, they're globally enabled &mdash; which works
+    fine and the addon doesn't interfere with that. But a globally
+    enabled alternative affects <em>every</em> test on the classpath.
+    Sometimes you need different replacements for different tests.
+</p>
+
+<h2>The Solution: @TestBean</h2>
+
+<p>
+    <code>@TestBean</code> activates <code>@Alternative</code> beans
+    <strong>per test class</strong>, without <code>@Priority</code>.
+    The extension enables them programmatically and vetoes unselected
+    alternatives to prevent conflicts. Existing
+    Other alternatives &mdash; whether enabled via <code>@Priority</code>
+    or <code>beans.xml</code> &mdash; continue to work normally as long
+    as their bean types don't overlap with a <code>@TestBean</code>
+    replacement. The extension respects <code>@Typed</code> on both
+    sides when checking for type clashes.
+</p>
+
+<ol class="steps">
+    <li>
+        <strong>Create your replacement as a normal CDI bean with
+        <code>@Alternative</code></strong> &mdash; define your own scope,
+        qualifiers, and logic. Don't add <code>@Priority</code>.
+<pre><code><span class="an">@Alternative</span>
+<span class="an">@ApplicationScoped</span>
+<span class="kw">public class</span> <span class="ty">CustomGreeting</span> <span class="kw">implements</span> <span class="ty">Greeting</span> {
+
+    <span class="an">@Override</span>
+    <span class="kw">public</span> <span class="ty">String</span> <span class="fn">greet</span>(<span class="ty">String</span> name) {
+        <span class="kw">return</span> <span class="st">"Hello, "</span> + name + <span class="st">"!"</span>;
+    }
+}</code></pre>
+    </li>
+    <li>
+        <strong>Annotate your test class with <code>@EnableTestBeans</code> +
+        <code>@TestBean</code></strong> to activate it:
+<pre><code><span class="an">@EnableTestBeans</span>
+<span class="an">@TestBean</span>(bean = <span class="ty">CustomGreeting</span>.<span class="kw">class</span>)
+<span class="kw">class</span> <span class="ty">GreetingTest</span> {
+    <span class="cm">// Greeting injection points now use CustomGreeting</span>
+    <span class="cm">// Everything else is still auto-mocked</span>
+}</code></pre>
+    </li>
+    <li>
+        <strong>Activate multiple replacements</strong>
+        &mdash; <code>@TestBean</code> is repeatable:
+<pre><code><span class="an">@EnableTestBeans</span>
+<span class="an">@TestBean</span>(bean = <span class="ty">CustomGreeting</span>.<span class="kw">class</span>)
+<span class="an">@TestBean</span>(bean = <span class="ty">CustomNotificationSender</span>.<span class="kw">class</span>)
+<span class="kw">class</span> <span class="ty">FullIntegrationTest</span> {
+    <span class="cm">// Both alternatives active, rest auto-mocked</span>
+}</code></pre>
+    </li>
+    <li>
+        <strong>Or use an inline <code>@Produces @TestBean</code> field</strong>
+        &mdash; define and stub a Mockito mock right in the test class:
+<pre><code><span class="an">@EnableTestBeans</span>
+<span class="kw">class</span> <span class="ty">GreetingTest</span> {
+
+    <span class="an">@Produces</span> <span class="an">@TestBean</span>
+    <span class="kw">private static</span> <span class="ty">Greeting</span> greeting = <span class="ty">Mockito</span>.<span class="fn">mock</span>(<span class="ty">Greeting</span>.<span class="kw">class</span>);
+
+    <span class="an">@Inject</span>
+    <span class="ty">GreetingConsumer</span> consumer;
+
+    <span class="an">@Test</span>
+    <span class="kw">void</span> <span class="fn">stubbedMockIsInjected</span>() {
+        <span class="ty">Mockito</span>.<span class="fn">when</span>(greeting.<span class="fn">greet</span>(<span class="st">"world"</span>)).<span class="fn">thenReturn</span>(<span class="st">"Stubbed!"</span>);
+
+        <span class="fn">assertEquals</span>(<span class="st">"Stubbed!"</span>, consumer.<span class="fn">getGreeting</span>().<span class="fn">greet</span>(<span class="st">"world"</span>));
+        <span class="fn">assertNull</span>(consumer.<span class="fn">getGreeting</span>().<span class="fn">greet</span>(<span class="st">"other"</span>));  <span class="cm">// unstubbed → null</span>
+    }
+}</code></pre>
+
+        <p>
+            No separate class, no <code>@Alternative</code>, no
+            <code>@ApplicationScoped</code>. The static field holds a
+            pre-configured Mockito mock that becomes a CDI bean.
+            Stubbing and verification work exactly as you'd expect.
+        </p>
+    </li>
+</ol>
+
+<p>
+    For producer beans with <code>@Produces</code> methods, composable
+    meta-annotations, whitelist mode, and more, see
+    <a href="testbean-advanced.html"><strong>Advanced Features</strong></a>.
+</p>
+
+</main>
+
+<footer>
+    <p>
+        <a href="https://github.com/os890/dynamic-cdi-test-bean-addon">Source on GitHub</a>
+        &nbsp;&middot;&nbsp;
+        <a href="https://www.apache.org/licenses/LICENSE-2.0">Apache License 2.0</a>
+    </p>
+    <p>
+        This is the first CDI extension from
+        <a href="https://github.com/os890">os890</a> created entirely in an
+        agentic AI workflow (Claude, Anthropic).
+    </p>
+</footer>
+
+</body>
+</html>
