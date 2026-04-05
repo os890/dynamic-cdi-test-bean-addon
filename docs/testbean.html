@@ -231,6 +231,8 @@
     <a href="index.html">Auto-Mocking</a>
     <a href="testbean.html" class="active">@TestBean Basics</a>
     <a href="testbean-advanced.html">Advanced Features</a>
+    <a href="blog-quarkus.html">Quarkus Port</a>
+    <a href="blog-modular.html">Modularization</a>
     <a href="internals.html">Internals</a>
     <a href="https://github.com/os890/dynamic-cdi-test-bean-addon">GitHub</a>
 </nav>
@@ -297,7 +299,11 @@
     </li>
     <li>
         <strong>Annotate your test class with <code>@EnableTestBeans</code> +
-        <code>@TestBean</code></strong> to activate it:
+        <code>@TestBean</code></strong> to activate it.
+        The annotation is repeatable &mdash; use multiple
+        <code>@TestBean</code> when you need a few replacements.
+        For larger setups, bundle them into
+        <a href="testbean-advanced.html#meta">composable meta-annotations</a>.
 <pre><code><span class="an">@EnableTestBeans</span>
 <span class="an">@TestBean</span>(bean = <span class="ty">CustomGreeting</span>.<span class="kw">class</span>)
 <span class="kw">class</span> <span class="ty">GreetingTest</span> {
@@ -316,12 +322,12 @@
 }</code></pre>
     </li>
     <li>
-        <strong>Or use an inline <code>@Produces @TestBean</code> field</strong>
+        <strong>Or use an inline <code>@TestBean</code> field</strong>
         &mdash; define and stub a Mockito mock right in the test class:
 <pre><code><span class="an">@EnableTestBeans</span>
 <span class="kw">class</span> <span class="ty">GreetingTest</span> {
 
-    <span class="an">@Produces</span> <span class="an">@TestBean</span>
+    <span class="an">@TestBean</span>
     <span class="kw">private static</span> <span class="ty">Greeting</span> greeting = <span class="ty">Mockito</span>.<span class="fn">mock</span>(<span class="ty">Greeting</span>.<span class="kw">class</span>);
 
     <span class="an">@Inject</span>
@@ -355,13 +361,15 @@
 
 <footer>
     <p>
-        <a href="https://github.com/os890/dynamic-cdi-test-bean-addon">Source on GitHub</a>
+        <a href="internals.html">Internals</a>
+    <a href="https://github.com/os890/dynamic-cdi-test-bean-addon">Source on GitHub</a>
         &nbsp;&middot;&nbsp;
         <a href="https://www.apache.org/licenses/LICENSE-2.0">Apache License 2.0</a>
     </p>
     <p>
         This is the first CDI extension from
-        <a href="https://github.com/os890">os890</a> created entirely in an
+        <a href="internals.html">Internals</a>
+    <a href="https://github.com/os890">os890</a> created entirely in an
         agentic AI workflow (Claude, Anthropic).
     </p>
 </footer>

@@ -358,6 +358,8 @@
     <a href="index.html" class="active">Auto-Mocking</a>
     <a href="testbean.html">@TestBean Basics</a>
     <a href="testbean-advanced.html">Advanced Features</a>
+    <a href="blog-quarkus.html">Quarkus Port</a>
+    <a href="blog-modular.html">Modularization</a>
     <a href="internals.html">Internals</a>
     <a href="https://github.com/os890/dynamic-cdi-test-bean-addon">GitHub</a>
 </nav>
@@ -407,13 +409,19 @@ WELD-001408: Unsatisfied dependencies for type BaseDao&lt;DummyEntity&gt;<br>
 
 <ol class="steps">
     <li>
-        <strong>Add one dependency:</strong>
+        <strong>Add one test dependency:</strong>
 <pre><code><span class="kw">&lt;dependency&gt;</span>
     <span class="kw">&lt;groupId&gt;</span><span class="st">org.os890.cdi.addon</span><span class="kw">&lt;/groupId&gt;</span>
-    <span class="kw">&lt;artifactId&gt;</span><span class="st">dynamic-cdi-test-bean-addon</span><span class="kw">&lt;/artifactId&gt;</span>
+    <span class="kw">&lt;artifactId&gt;</span><span class="st">dynamic-cdi-test-bean-addon-cdi</span><span class="kw">&lt;/artifactId&gt;</span>
     <span class="kw">&lt;version&gt;</span><span class="st">1.0.0-SNAPSHOT</span><span class="kw">&lt;/version&gt;</span>
     <span class="kw">&lt;scope&gt;</span><span class="st">test</span><span class="kw">&lt;/scope&gt;</span>
 <span class="kw">&lt;/dependency&gt;</span></code></pre>
+<p style="font-size:0.9rem;color:var(--text-muted);margin-top:-0.5rem;">
+    The API (<code>@EnableTestBeans</code>, <code>@TestBean</code>) is
+    included transitively. Using Quarkus/ArC instead? See
+    <a href="blog-quarkus.html">the Quarkus page</a> for the matching
+    artifact.
+</p>
     </li>
     <li>
         <strong>A typical bean in your common module:</strong>
@@ -520,9 +528,9 @@ WELD-001408: Unsatisfied dependencies for type BaseDao&lt;DummyEntity&gt;<br>
 </ul>
 
 <div class="callout">
-    <strong>Built on the standard CDI API only.</strong> Works with both
-    OpenWebBeans and Weld. No vendor lock-in. Compatible with DeltaSpike.
-    Tested with 64 tests on every build.
+    <strong>Built on the standard CDI API only.</strong> Works with
+    OpenWebBeans, Weld, and Quarkus/ArC. No vendor lock-in. Compatible
+    with DeltaSpike. Tested with 128 tests across 3 modules on every build.
 </div>
 
 <div class="callout">
@@ -538,13 +546,15 @@ WELD-001408: Unsatisfied dependencies for type BaseDao&lt;DummyEntity&gt;<br>
 <!-- ============================================================ Footer -->
 <footer>
     <p>
-        <a href="https://github.com/os890/dynamic-cdi-test-bean-addon">Source on GitHub</a>
+        <a href="internals.html">Internals</a>
+    <a href="https://github.com/os890/dynamic-cdi-test-bean-addon">Source on GitHub</a>
         &nbsp;&middot;&nbsp;
         <a href="https://www.apache.org/licenses/LICENSE-2.0">Apache License 2.0</a>
     </p>
     <p>
         This is the first CDI extension from
-        <a href="https://github.com/os890">os890</a> created entirely in an
+        <a href="internals.html">Internals</a>
+    <a href="https://github.com/os890">os890</a> created entirely in an
         agentic AI workflow (Claude, Anthropic) &mdash; extension, test suite,
         build configuration, and documentation.
     </p>

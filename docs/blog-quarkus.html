@@ -1,0 +1,287 @@
+<!--
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+
+      http://www.apache.org/licenses/LICENSE-2.0
+
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Blog #1: Porting to Quarkus/ArC &mdash; Dynamic CDI Test Bean Addon</title>
+    <style>
+        :root { --bg: #0f1117; --surface: #161b22; --border: #30363d; --text: #e6edf3; --text-muted: #8b949e; --accent: #58a6ff; --accent-hover: #79c0ff; --green: #3fb950; --red: #f85149; --orange: #d29922; --code-bg: #1c2128; --code-border: #262c36; --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; --font-mono: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', Consolas, monospace; }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html { scroll-behavior: smooth; }
+        body { font-family: var(--font-sans); background: var(--bg); color: var(--text); line-height: 1.7; font-size: 17px; }
+        .hero { background: linear-gradient(135deg, #0d1117 0%, #161b22 50%, #1a1f2b 100%); border-bottom: 1px solid var(--border); padding: 5rem 2rem 4rem; text-align: center; }
+        .hero h1 { font-size: clamp(1.8rem, 4vw, 2.8rem); font-weight: 800; letter-spacing: -0.03em; line-height: 1.2; margin-bottom: 1.2rem; }
+        .hero h1 span { color: var(--accent); }
+        .hero .subtitle { font-size: 1.1rem; color: var(--text-muted); max-width: 640px; margin: 0 auto 2rem; }
+        .hero .badge-row { display: flex; gap: 0.6rem; justify-content: center; flex-wrap: wrap; }
+        .badge { display: inline-block; padding: 0.3rem 0.8rem; border-radius: 999px; font-size: 0.8rem; font-weight: 600; letter-spacing: 0.02em; border: 1px solid var(--border); background: var(--surface); color: var(--text-muted); }
+        .badge.green { border-color: #238636; color: var(--green); }
+        .badge.blue { border-color: #1f6feb; color: var(--accent); }
+        .badge.orange { border-color: #9e6a03; color: var(--orange); }
+        .content { max-width: 820px; margin: 0 auto; padding: 3rem 2rem 5rem; }
+        h2 { font-size: 1.8rem; font-weight: 700; letter-spacing: -0.02em; margin: 3.5rem 0 1rem; padding-bottom: 0.5rem; border-bottom: 1px solid var(--border); }
+        h3 { font-size: 1.25rem; font-weight: 600; margin: 2rem 0 0.8rem; color: var(--accent); }
+        p { margin-bottom: 1rem; }
+        a { color: var(--accent); text-decoration: none; }
+        a:hover { color: var(--accent-hover); text-decoration: underline; }
+        strong { color: #f0f6fc; }
+        pre { background: var(--code-bg); border: 1px solid var(--code-border); border-radius: 8px; padding: 1.2rem 1.4rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.88rem; line-height: 1.6; }
+        code { font-family: var(--font-mono); }
+        p code, li code, td code { background: var(--code-bg); border: 1px solid var(--code-border); border-radius: 4px; padding: 0.15em 0.4em; font-size: 0.9em; }
+        .kw { color: #ff7b72; } .ty { color: #79c0ff; } .fn { color: #d2a8ff; } .st { color: #a5d6ff; } .cm { color: #8b949e; font-style: italic; } .an { color: #ffa657; }
+        table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.95rem; }
+        th { text-align: left; padding: 0.7rem 1rem; background: var(--surface); border: 1px solid var(--border); font-weight: 600; color: var(--text); }
+        td { padding: 0.6rem 1rem; border: 1px solid var(--border); color: var(--text-muted); }
+        tr:hover td { background: rgba(88, 166, 255, 0.04); }
+        ul, ol { margin: 0.5rem 0 1.5rem 1.5rem; }
+        li { margin-bottom: 0.4rem; color: var(--text-muted); }
+        li strong { color: var(--text); }
+        .callout { background: var(--surface); border: 1px solid var(--border); border-left: 4px solid var(--accent); border-radius: 8px; padding: 1rem 1.4rem; margin: 1.5rem 0; font-size: 0.95rem; color: var(--text-muted); }
+        .callout strong { color: var(--accent); }
+        .result-box { background: #0f1a0f; border: 1px solid #1a4d1a; border-radius: 8px; padding: 2rem; margin: 1.5rem 0; text-align: center; }
+        .result-box .number { font-size: 3rem; font-weight: 800; color: var(--green); }
+        .result-box .label { font-size: 0.95rem; color: var(--green); margin-top: 0.3rem; }
+        .result-box .detail { font-size: 0.85rem; color: var(--text-muted); margin-top: 0.8rem; }
+        .topnav { position: sticky; top: 0; z-index: 100; background: var(--surface); border-bottom: 1px solid var(--border); padding: 0.6rem 2rem; display: flex; gap: 1.5rem; justify-content: center; flex-wrap: wrap; font-size: 0.88rem; }
+        .topnav a { color: var(--text-muted); text-decoration: none; padding: 0.2rem 0; }
+        .topnav a:hover { color: var(--accent); }
+        .topnav a.active { color: var(--accent); border-bottom: 2px solid var(--accent); }
+        .series-nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid var(--border); font-size: 0.9rem; }
+        .series-nav a { color: var(--accent); }
+        .series-nav .disabled { color: var(--text-muted); }
+        footer { text-align: center; padding: 2rem; color: var(--text-muted); font-size: 0.85rem; border-top: 1px solid var(--border); }
+        footer a { color: var(--accent); }
+        @media (max-width: 600px) { .hero { padding: 3rem 1.2rem 2.5rem; } .content { padding: 2rem 1.2rem 3rem; } pre { font-size: 0.8rem; padding: 1rem; } .topnav { padding: 0.5rem 1rem; gap: 1rem; font-size: 0.8rem; } }
+    </style>
+</head>
+<body>
+
+<nav class="topnav">
+    <a href="index.html">Auto-Mocking</a>
+    <a href="testbean.html">@TestBean Basics</a>
+    <a href="testbean-advanced.html">Advanced Features</a>
+    <a href="blog-quarkus.html" class="active">Quarkus Port</a>
+    <a href="blog-modular.html">Modularization</a>
+    <a href="internals.html">Internals</a>
+    <a href="https://github.com/os890/dynamic-cdi-test-bean-addon">GitHub</a>
+</nav>
+
+<section class="hero">
+    <h1><span>Porting to Quarkus/ArC</span></h1>
+    <p class="subtitle">
+        How we ported the auto-mocking CDI extension from CDI SE (Weld/OWB)
+        to Quarkus/ArC using only ArC's processor SPIs &mdash; no @QuarkusTest required.
+    </p>
+    <div class="badge-row">
+        <span class="badge blue">ArC</span>
+        <span class="badge green">64 tests passing</span>
+        <span class="badge orange">JVM mode</span>
+        <span class="badge">April 2026</span>
+    </div>
+</section>
+
+<main class="content">
+
+<h2>The Challenge</h2>
+
+<p>
+    The addon uses six CDI lifecycle events &mdash;
+    <code>BeforeBeanDiscovery</code>, <code>ProcessAnnotatedType</code>,
+    <code>AfterTypeDiscovery</code>, <code>ProcessInjectionPoint</code>,
+    <code>ProcessBean</code>, and <code>AfterBeanDiscovery</code> &mdash;
+    to discover unsatisfied injection points and register Mockito mocks.
+    ArC fires none of these at runtime. It processes everything at build
+    time through a <code>BeanProcessor</code> pipeline.
+</p>
+
+<h2>CDI SE vs ArC: API Mapping</h2>
+
+<table>
+    <tr><th>Feature</th><th>CDI SE</th><th>Quarkus/ArC</th></tr>
+    <tr><td><strong>Bean discovery</strong></td><td>Runtime classpath scanning</td><td>Jandex index at build time</td></tr>
+    <tr><td><strong>Synthetic beans</strong></td><td><code>AfterBeanDiscovery.addBean()</code></td><td><code>BeanRegistrar</code> + <code>BeanConfigurator</code></td></tr>
+    <tr><td><strong>Alternatives</strong></td><td><code>AfterTypeDiscovery.getAlternatives()</code></td><td><code>AnnotationTransformation</code> &mdash; add <code>@Priority</code></td></tr>
+    <tr><td><strong>Vetoing beans</strong></td><td><code>ProcessAnnotatedType.veto()</code></td><td><code>BeanProcessor.addExcludeType()</code></td></tr>
+    <tr><td><strong>Container boot</strong></td><td><code>SeContainerInitializer.initialize()</code></td><td><code>BeanProcessor.process()</code> + <code>Arc.initialize()</code></td></tr>
+    <tr><td><strong>Mock creation</strong></td><td>Custom <code>Bean&lt;T&gt;</code> impl</td><td><code>BeanCreator&lt;T&gt;</code> &mdash; <code>Mockito.mock()</code></td></tr>
+    <tr><td><strong>Test injection</strong></td><td><code>InjectionTarget.inject()</code></td><td><code>ArcContainer.select().get()</code></td></tr>
+    <tr><td><strong>Request scope</strong></td><td><code>RequestContextController</code></td><td><code>Arc.container().requestContext()</code></td></tr>
+</table>
+
+<h2>The Approach</h2>
+
+<p>
+    We use ArC's processor APIs directly &mdash; the same way ArC's own
+    <code>ArcTestContainer</code> and Quarkus's
+    <code>QuarkusComponentTestExtension</code> do it. No
+    <code>@BuildStep</code> processors, no multi-module deployment/runtime
+    split. <code>@QuarkusTest</code> is not required &mdash; but if present,
+    the addon detects it and skips container management, letting the
+    Quarkus test framework handle the lifecycle.
+</p>
+
+<p>The result is a single JUnit 5 extension that performs a full ArC build
+    pass inside <code>@BeforeAll</code>:</p>
+
+<pre><code><span class="an">@EnableTestBeans</span>
+<span class="an">@TestBean</span>(bean = CustomGreeting.<span class="kw">class</span>)
+<span class="kw">class</span> <span class="ty">MyTest</span> {
+
+    <span class="an">@Inject</span>
+    <span class="ty">GreetingConsumer</span> consumer;
+
+    <span class="an">@Test</span>
+    <span class="kw">void</span> <span class="fn">greetingIsReplaced</span>() {
+        <span class="fn">assertEquals</span>(<span class="st">"Hello, world!"</span>, consumer.<span class="fn">getGreeting</span>().<span class="fn">greet</span>(<span class="st">"world"</span>));
+    }
+}</code></pre>
+
+<p>Same annotations. Same test structure. Same developer experience.</p>
+
+<h3>How It Works</h3>
+
+<ol>
+    <li><strong>Discover classes</strong> &mdash; scans test-classes directory and classpath JARs, filters out other test classes</li>
+    <li><strong>Build Jandex index</strong> &mdash; indexes every bean class and its type hierarchy</li>
+    <li><strong>Transform annotations</strong> &mdash; adds <code>@Priority(MAX_VALUE)</code> to <code>@TestBean</code>-selected alternatives</li>
+    <li><strong>Exclude clashing beans</strong> &mdash; unselected alternatives with type overlap are excluded</li>
+    <li><strong>Register mock beans</strong> &mdash; a <code>BeanRegistrar</code> iterates all injection points, unsatisfied ones get a <code>MockBeanCreator</code></li>
+    <li><strong>Register inline fields</strong> &mdash; <code>@TestBean</code> static fields get an <code>InlineFieldBeanCreator</code></li>
+    <li><strong>Process and boot</strong> &mdash; <code>BeanProcessor.process()</code> generates bytecode, <code>Arc.initialize()</code> starts the container</li>
+</ol>
+
+<h2>@Nonbinding &mdash; The Subtle One</h2>
+
+<p>
+    CDI qualifiers can have <code>@Nonbinding</code> members &mdash; meaning
+    those values are ignored during bean resolution. If two injection points
+    differ only in a <code>@Nonbinding</code> member, they must share the
+    same mock bean. The ArC version queries the <code>BeanDeployment</code>
+    for nonbinding members, strips those values from qualifier annotations
+    before registration, and deduplicates using a key that ignores
+    nonbinding member values.
+</p>
+
+<h2>What Was Eliminated</h2>
+
+<table>
+    <tr><th>CDI SE Component</th><th>Quarkus Status</th></tr>
+    <tr><td><strong>DynamicTestBeanExtension</strong></td><td>Replaced by <code>BeanRegistrar</code> + <code>AnnotationTransformation</code></td></tr>
+    <tr><td><strong>DynamicTestBeanContext</strong></td><td>Eliminated &mdash; no static volatile bridge needed</td></tr>
+    <tr><td><strong>META-INF/services/...Extension</strong></td><td>Eliminated &mdash; <code>@ExtendWith</code> is the entry point</td></tr>
+    <tr><td><strong>Weld / OWB profiles</strong></td><td>Eliminated &mdash; ArC only</td></tr>
+    <tr><td><strong>manageContainer flag</strong></td><td>Ignored &mdash; container managed by the extension (or by <code>@QuarkusTest</code> if present)</td></tr>
+</table>
+
+<h2>Using with @QuarkusTest</h2>
+
+<p>
+    The addon works standalone &mdash; it boots and manages its own ArC
+    container. But in a full Quarkus application you may already use
+    <code>@QuarkusTest</code>, which manages the container itself. Using
+    both is safe: when <code>@QuarkusTest</code> (or
+    <code>@QuarkusComponentTest</code>) is detected on the test class, the
+    addon automatically skips all container lifecycle management. Only the
+    <code>@TestBean</code> / <code>@EnableTestBeans</code> annotations are
+    processed &mdash; the Quarkus test framework handles the rest.
+</p>
+
+<h3>Standalone (addon manages the container)</h3>
+
+<pre><code><span class="an">@EnableTestBeans</span>
+<span class="an">@TestBean</span>(bean = CustomGreeting.<span class="kw">class</span>)
+<span class="kw">class</span> <span class="ty">StandaloneTest</span> {
+
+    <span class="an">@Inject</span>
+    <span class="ty">GreetingConsumer</span> consumer;
+
+    <span class="an">@Test</span>
+    <span class="kw">void</span> <span class="fn">test</span>() {
+        <span class="fn">assertEquals</span>(<span class="st">"Hello, world!"</span>, consumer.<span class="fn">getGreeting</span>().<span class="fn">greet</span>(<span class="st">"world"</span>));
+    }
+}</code></pre>
+
+<h3>Combined with @QuarkusTest (Quarkus manages the container)</h3>
+
+<pre><code><span class="an">@QuarkusTest</span>            <span class="cm">// Quarkus manages the container</span>
+<span class="an">@EnableTestBeans</span>       <span class="cm">// addon skips container, provides @TestBean support</span>
+<span class="an">@TestBean</span>(bean = CustomGreeting.<span class="kw">class</span>)
+<span class="kw">class</span> <span class="ty">QuarkusIntegrationTest</span> {
+
+    <span class="an">@Inject</span>
+    <span class="ty">GreetingConsumer</span> consumer;
+
+    <span class="an">@Test</span>
+    <span class="kw">void</span> <span class="fn">test</span>() {
+        <span class="fn">assertEquals</span>(<span class="st">"Hello, world!"</span>, consumer.<span class="fn">getGreeting</span>().<span class="fn">greet</span>(<span class="st">"world"</span>));
+    }
+}</code></pre>
+
+<div class="callout">
+    <strong>Detection is automatic.</strong> The addon checks for
+    <code>@QuarkusTest</code> and <code>@QuarkusComponentTest</code> by
+    annotation name &mdash; no compile-time dependency on the Quarkus test
+    framework is required. If neither annotation is present, the addon
+    manages the ArC container itself.
+</div>
+
+<h2>The Result</h2>
+
+<div class="result-box">
+    <div class="number">64 / 64</div>
+    <div class="label">tests passing</div>
+    <div class="detail">All 64 original tests ported with Quarkus equivalents</div>
+</div>
+
+<h2>Maven Dependency</h2>
+
+<pre><code><span class="kw">&lt;dependency&gt;</span>
+    <span class="kw">&lt;groupId&gt;</span><span class="st">org.os890.cdi.addon</span><span class="kw">&lt;/groupId&gt;</span>
+    <span class="kw">&lt;artifactId&gt;</span><span class="st">dynamic-cdi-test-bean-addon-quarkus</span><span class="kw">&lt;/artifactId&gt;</span>
+    <span class="kw">&lt;version&gt;</span><span class="st">1.0.0-SNAPSHOT</span><span class="kw">&lt;/version&gt;</span>
+    <span class="kw">&lt;scope&gt;</span><span class="st">test</span><span class="kw">&lt;/scope&gt;</span>
+<span class="kw">&lt;/dependency&gt;</span></code></pre>
+
+<div class="callout">
+    <strong>That's it.</strong> The API (<code>@EnableTestBeans</code>,
+    <code>@TestBean</code>) is included transitively. The dependency
+    footprint is just ArC (<code>arc-processor</code> +
+    <code>arc-runtime</code>), plus JUnit and Mockito as
+    <code>provided</code> scope. No quarkus-core, no quarkus-bootstrap,
+    no SmallRye Config.
+</div>
+
+<div class="series-nav">
+    <span class="disabled">&larr; first post</span>
+    <a href="blog-modular.html">Modularization &rarr;</a>
+</div>
+
+</main>
+
+<footer>
+    <p>
+        <a href="internals.html">Internals</a>
+    <a href="https://github.com/os890/dynamic-cdi-test-bean-addon">Source on GitHub</a>
+        &nbsp;&middot;&nbsp;
+        <a href="https://www.apache.org/licenses/LICENSE-2.0">Apache License 2.0</a>
+    </p>
+</footer>
+
+</body>
+</html>

@@ -73,6 +73,8 @@
     <a href="index.html">Auto-Mocking</a>
     <a href="testbean.html">@TestBean Basics</a>
     <a href="testbean-advanced.html" class="active">Advanced Features</a>
+    <a href="blog-quarkus.html">Quarkus Port</a>
+    <a href="blog-modular.html">Modularization</a>
     <a href="internals.html">Internals</a>
     <a href="https://github.com/os890/dynamic-cdi-test-bean-addon">GitHub</a>
 </nav>
@@ -162,7 +164,7 @@
 </p>
 
 <!-- ======== Composable meta-annotations ======== -->
-<h2>3. Composable Meta-Annotations</h2>
+<h2 id="meta">3. Composable Meta-Annotations</h2>
 
 <p>
     Bundle <code>@TestBean</code> declarations into reusable annotations.
@@ -173,14 +175,16 @@
 <h3>Level 1: single concern</h3>
 
 <pre><code><span class="an">@TestBean</span>(bean = <span class="ty">CustomGreeting</span>.<span class="kw">class</span>)
-<span class="an">@Retention</span>(<span class="ty">RUNTIME</span>) <span class="an">@Target</span>(<span class="ty">TYPE</span>)
+<span class="an">@Retention</span>(<span class="ty">RUNTIME</span>)
+<span class="an">@Target</span>({<span class="ty">TYPE</span>, <span class="ty">ANNOTATION_TYPE</span>})
 <span class="kw">public</span> <span class="kw">@interface</span> <span class="ty">GreetingMocks</span> {}</code></pre>
 
 <h3>Level 2: compose level-1 annotations</h3>
 
 <pre><code><span class="an">@GreetingMocks</span>
 <span class="an">@NotificationMocks</span>
-<span class="an">@Retention</span>(<span class="ty">RUNTIME</span>) <span class="an">@Target</span>(<span class="ty">TYPE</span>)
+<span class="an">@Retention</span>(<span class="ty">RUNTIME</span>)
+<span class="an">@Target</span>({<span class="ty">TYPE</span>, <span class="ty">ANNOTATION_TYPE</span>})
 <span class="kw">public</span> <span class="kw">@interface</span> <span class="ty">StandardMocks</span> {}</code></pre>
 
 <h3>Level 3: compose level-2 + add more</h3>
@@ -188,7 +192,8 @@
 <pre><code><span class="an">@StandardMocks</span>
 <span class="an">@TestBean</span>(beanProducer = <span class="ty">AuditProducers</span>.<span class="kw">class</span>)
 <span class="an">@TestBean</span>(bean = <span class="ty">CustomGreeting</span>.<span class="kw">class</span>)  <span class="cm">// redundant &mdash; already in @GreetingMocks</span>
-<span class="an">@Retention</span>(<span class="ty">RUNTIME</span>) <span class="an">@Target</span>(<span class="ty">TYPE</span>)
+<span class="an">@Retention</span>(<span class="ty">RUNTIME</span>)
+<span class="an">@Target</span>({<span class="ty">TYPE</span>, <span class="ty">ANNOTATION_TYPE</span>})
 <span class="kw">public</span> <span class="kw">@interface</span> <span class="ty">FullTestSetup</span> {}</code></pre>
 
 <h3>Usage</h3>
@@ -247,13 +252,15 @@
 
 <footer>
     <p>
-        <a href="https://github.com/os890/dynamic-cdi-test-bean-addon">Source on GitHub</a>
+        <a href="internals.html">Internals</a>
+    <a href="https://github.com/os890/dynamic-cdi-test-bean-addon">Source on GitHub</a>
         &nbsp;&middot;&nbsp;
         <a href="https://www.apache.org/licenses/LICENSE-2.0">Apache License 2.0</a>
     </p>
     <p>
         This is the first CDI extension from
-        <a href="https://github.com/os890">os890</a> created entirely in an
+        <a href="internals.html">Internals</a>
+    <a href="https://github.com/os890">os890</a> created entirely in an
         agentic AI workflow (Claude, Anthropic).
     </p>
 </footer>
