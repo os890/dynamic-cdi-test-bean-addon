@@ -27,6 +27,11 @@ import org.mockito.Mockito;
 /**
  * {@link BeanCreator} that creates a Mockito mock for the implementation class
  * passed as a parameter.
+ *
+ * <p>The class can be provided either as a {@code ClassInfo} via the
+ * {@code "implementationClass"} param (resolved by ArC to a {@code Class<?>}
+ * at runtime) or as a class name string via {@code "implementationClassName"}
+ * for JDK types that are not in the Jandex index.</p>
  */
 public class MockBeanCreator implements BeanCreator<Object> {
 
@@ -34,8 +39,32 @@ public class MockBeanCreator implements BeanCreator<Object> {
 
     @Override
     public Object create(SyntheticCreationalContext<Object> context) {
-        Class<?> implementationClass = (Class<?>) context.getParams().get("implementationClass");
+        Class<?> implementationClass = resolveClass(context);
         LOG.info("[DynamicTestBean] Mock created for: " + implementationClass.getName());
-        return Mockito.mock(implementationClass);
+        try {
+            return Mockito.mock(implementationClass);
+        } catch (Exception e) {
+            // JDK type that Mockito cannot subclass — return null,
+            // consistent with Mockito's default answer for reference types
+            return null;
+        }
+    }
+
+    private static Class<?> resolveClass(SyntheticCreationalContext<Object> context) {
+        Object implClass = context.getParams().get("implementationClass");
+        if (implClass instanceof Class<?> cls) {
+            return cls;
+        }
+        // Fallback: class name string for JDK types not in Jandex index
+        String className = (String) context.getParams().get("implementationClassName");
+        if (className != null) {
+            try {
+                return Class.forName(className);
+            } catch (ClassNotFoundException e) {
+                throw new RuntimeException("Cannot load mock target class: " + className, e);
+            }
+        }
+        throw new IllegalStateException(
+                "[DynamicTestBean] No implementationClass or implementationClassName param found");
     }
 }

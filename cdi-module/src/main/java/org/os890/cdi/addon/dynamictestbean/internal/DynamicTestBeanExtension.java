@@ -53,6 +53,7 @@ import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.Objects;
 import java.util.Set;
@@ -461,12 +462,12 @@ public class DynamicTestBeanExtension implements Extension {
     <T> void collectInjectionPoints(@Observes ProcessInjectionPoint<?, T> pip) {
         InjectionPoint ip = pip.getInjectionPoint();
         Type type = ip.getType();
+        Set<Annotation> qualifiers = filterImplicitQualifiers(ip.getQualifiers());
 
-        if (isBuiltInType(type)) {
+        if (isBuiltInType(type, qualifiers)) {
             return;
         }
 
-        Set<Annotation> qualifiers = filterImplicitQualifiers(ip.getQualifiers());
         collectedInjectionPoints.add(new InjectionPointKey(type, qualifiers));
     }
 
@@ -484,10 +485,10 @@ public class DynamicTestBeanExtension implements Extension {
     <T> void collectFromBean(@Observes ProcessBean<T> pb) {
         for (InjectionPoint ip : pb.getBean().getInjectionPoints()) {
             Type type = ip.getType();
-            if (isBuiltInType(type)) {
+            Set<Annotation> qualifiers = filterImplicitQualifiers(ip.getQualifiers());
+            if (isBuiltInType(type, qualifiers)) {
                 continue;
             }
-            Set<Annotation> qualifiers = filterImplicitQualifiers(ip.getQualifiers());
             collectedInjectionPoints.add(new InjectionPointKey(type, qualifiers));
         }
     }
@@ -534,6 +535,7 @@ public class DynamicTestBeanExtension implements Extension {
         }
 
         int mockCount = 0;
+        Set<String> registeredMockIds = new HashSet<>();
         for (InjectionPointKey key : collectedInjectionPoints) {
             if (isSatisfied(key, bm)) {
                 continue;
@@ -545,11 +547,18 @@ public class DynamicTestBeanExtension implements Extension {
                 continue;
             }
 
+            MockBean<?> mockBean = new MockBean<>(rawType, key.type, key.qualifiers);
+
+            // Prevent registering multiple mocks with the same unique id
+            if (!registeredMockIds.add(mockBean.getId())) {
+                continue;
+            }
+
             String description = formatType(key.type)
                     + (key.qualifiers.isEmpty() ? "" : " " + key.qualifiers);
 
             LOG.info("[DynamicTestBean] Registering mock for: " + description);
-            abd.addBean(new MockBean<>(rawType, key.type, key.qualifiers));
+            abd.addBean(mockBean);
             mockCount++;
         }
 
@@ -562,22 +571,46 @@ public class DynamicTestBeanExtension implements Extension {
     // ======================== Type utilities ========================
 
     /**
-     * Returns {@code true} if the given type is a CDI built-in, JDK,
-     * or vendor-internal type that should not be mocked.
+     * Returns {@code true} if the given type is a CDI built-in or
+     * vendor-internal type that should not be mocked.
+     *
+     * <p>JDK types ({@code java.*}) are only considered built-in when
+     * they carry <em>no</em> custom qualifiers. A JDK type with a custom
+     * qualifier (e.g. {@code @BatchProperty String}) is typically produced
+     * by an {@link jakarta.enterprise.inject.spi.InjectionPoint}-aware
+     * producer method and must be collected so a mock can be registered
+     * when the producer is absent from the test classpath.</p>
+     *
+     * @param type       the injection-point type
+     * @param qualifiers the injection-point qualifiers with implicit
+     *                   qualifiers ({@code @Default}, {@code @Any}) already
+     *                   stripped
      */
-    private static boolean isBuiltInType(Type type) {
+    private static boolean isBuiltInType(Type type, Set<Annotation> qualifiers) {
         Class<?> raw = getRawType(type);
         if (raw == null) {
             return true;
         }
         String name = raw.getName();
-        return name.startsWith("javax.enterprise.")
+
+        // CDI spec types and vendor internals — always skip
+        if (name.startsWith("javax.enterprise.")
                 || name.startsWith("javax.inject.")
                 || name.startsWith("jakarta.enterprise.")
                 || name.startsWith("jakarta.inject.")
-                || name.startsWith("java.")
                 || name.startsWith("org.jboss.weld.")
-                || name.startsWith("org.apache.webbeans.");
+                || name.startsWith("org.apache.webbeans.")) {
+            return true;
+        }
+
+        // JDK types without custom qualifiers are built-in (plain String,
+        // List, etc.). JDK types WITH custom qualifiers are expected to
+        // come from producer methods and should be collected.
+        if (name.startsWith("java.")) {
+            return qualifiers.isEmpty();
+        }
+
+        return false;
     }
 
     /**
@@ -804,6 +837,7 @@ public class DynamicTestBeanExtension implements Extension {
         private final Set<Annotation> qualifiers;
         private final String id;
         private final String name;
+        private final boolean jdkType;
 
         @SuppressWarnings("unchecked")
         MockBean(Class<?> rawType, Type beanType, Set<Annotation> qualifiers) {
@@ -818,12 +852,16 @@ public class DynamicTestBeanExtension implements Extension {
             this.qualifiers.add(Any.Literal.INSTANCE);
             this.id = "DynamicTestBean#" + beanType + "#" + qualifiers;
             this.name = extractName(qualifiers, rawType);
+            this.jdkType = rawType.getName().startsWith("java.");
         }
 
         /**
-         * Extracts the bean name from the qualifiers. If a {@code @Named}
-         * qualifier is present, its value is used so that the mock matches
-         * the injection point. Otherwise falls back to a descriptive default.
+         * Builds a unique bean name. If a {@code @Named} qualifier is
+         * present, its value is used so that the mock matches the injection
+         * point. Otherwise a deterministic name is derived from the
+         * fully-qualified class name and qualifier annotation types so
+         * that beans for the same type with different qualifiers do not
+         * collide.
          */
         private static String extractName(Set<Annotation> qualifiers, Class<?> rawType) {
             for (Annotation q : qualifiers) {
@@ -834,7 +872,16 @@ public class DynamicTestBeanExtension implements Extension {
                     }
                 }
             }
-            return "dynamicTestBean_" + rawType.getSimpleName();
+            StringBuilder sb = new StringBuilder("dynamicTestBean_");
+            sb.append(rawType.getName());
+            // Append qualifier type names (sorted for determinism) to
+            // ensure uniqueness when the same type is qualified differently
+            qualifiers.stream()
+                    .map(q -> q.annotationType().getName())
+                    .filter(n -> !n.endsWith(".Default") && !n.endsWith(".Any") && !n.endsWith(".Named"))
+                    .sorted()
+                    .forEach(n -> sb.append('_').append(n));
+            return sb.toString();
         }
 
         /** {@inheritDoc} */
@@ -859,10 +906,15 @@ public class DynamicTestBeanExtension implements Extension {
             return qualifiers;
         }
 
-        /** Returns {@link RequestScoped} — mock beans are scoped per request. */
+        /**
+         * Returns the scope for this mock bean. JDK types (e.g. {@code String})
+         * use {@link Dependent @Dependent} because CDI containers cannot create
+         * normal-scope proxies for final JDK classes. All other types use
+         * {@link RequestScoped @RequestScoped}.
+         */
         @Override
         public Class<? extends Annotation> getScope() {
-            return RequestScoped.class;
+            return jdkType ? Dependent.class : RequestScoped.class;
         }
 
         /** Returns a descriptive name for logging and container diagnostics. */
@@ -895,10 +947,24 @@ public class DynamicTestBeanExtension implements Extension {
             return Collections.emptySet();
         }
 
-        /** Creates a new Mockito mock of the raw type. */
+        /**
+         * Creates a new Mockito mock of the raw type.
+         *
+         * <p>For JDK types that Mockito cannot mock (e.g. certain final
+         * bootstrap-loaded classes), returns {@code null} instead of
+         * propagating the error — this mirrors Mockito's default return
+         * value for reference types and keeps the container healthy.</p>
+         */
         @Override
+        @SuppressWarnings("unchecked")
         public T create(CreationalContext<T> ctx) {
-            return Mockito.mock(rawType);
+            try {
+                return Mockito.mock(rawType);
+            } catch (Exception e) {
+                // JDK type that Mockito cannot subclass (e.g. String) —
+                // return null, consistent with Mockito's default answer
+                return null;
+            }
         }
 
         /** Releases the creational context. */

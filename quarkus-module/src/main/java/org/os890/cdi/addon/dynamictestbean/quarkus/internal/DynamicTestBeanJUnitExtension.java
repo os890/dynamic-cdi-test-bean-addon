@@ -24,6 +24,7 @@ import java.io.InputStream;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -418,7 +419,7 @@ public class DynamicTestBeanJUnitExtension implements TestBeanContainerManager {
                         Type requiredType = ip.getRequiredType();
                         Set<AnnotationInstance> requiredQualifiers = ip.getRequiredQualifiers();
 
-                        if (isBuiltInType(requiredType)) {
+                        if (isBuiltInType(requiredType, requiredQualifiers)) {
                             continue;
                         }
 
@@ -439,6 +440,28 @@ public class DynamicTestBeanJUnitExtension implements TestBeanContainerManager {
 
                         ClassInfo implClass = computingIndex.getClassByName(requiredType.name());
                         if (implClass == null) {
+                            // JDK types (e.g. String) may not be in the Jandex
+                            // index. For qualified JDK types we pass the class
+                            // name so MockBeanCreator can load it at runtime.
+                            String typeName = requiredType.name().toString();
+                            if (!typeName.startsWith("java.")) {
+                                continue;
+                            }
+
+                            Set<AnnotationInstance> cleanedQualifiers = stripNonbindingValues(
+                                    requiredQualifiers, nonbindingMembers);
+
+                            registrationContext.configure(requiredType.name())
+                                    .identifier(mockKey)
+                                    .scope(Singleton.class)
+                                    .addType(requiredType)
+                                    .qualifiers(cleanedQualifiers.toArray(new AnnotationInstance[0]))
+                                    .creator(MockBeanCreator.class)
+                                    .param("implementationClassName", typeName)
+                                    .defaultBean()
+                                    .done();
+
+                            LOG.info("[DynamicTestBean] Registered mock for: " + requiredType);
                             continue;
                         }
 
@@ -448,6 +471,7 @@ public class DynamicTestBeanJUnitExtension implements TestBeanContainerManager {
                                 requiredQualifiers, nonbindingMembers);
 
                         registrationContext.configure(requiredType.name())
+                                .identifier(mockKey)
                                 .scope(Singleton.class)
                                 .addType(requiredType)
                                 .qualifiers(cleanedQualifiers.toArray(new AnnotationInstance[0]))
@@ -682,47 +706,84 @@ public class DynamicTestBeanJUnitExtension implements TestBeanContainerManager {
     }
 
     /**
-     * Scans all JARs on the classpath that contain a {@code META-INF/beans.xml}
-     * (CDI bean archive marker). All {@code .class} entries in those JARs are
-     * loaded, excluding JDK/vendor/addon internal packages.
+     * Scans all bean archives on the classpath that contain a
+     * {@code META-INF/beans.xml} (CDI bean archive marker).
+     *
+     * <p>Handles both {@code jar:} URLs (real JARs) and {@code file:}
+     * URLs (exploded directories — common in Maven reactor builds where
+     * test-jar dependencies resolve to {@code target/test-classes}).</p>
      */
     private static void scanClasspathJars(ClassLoader cl, Set<Class<?>> classes) {
         try {
             java.util.Enumeration<java.net.URL> beansXmls = cl.getResources("META-INF/beans.xml");
-            Set<String> scannedJars = new HashSet<>();
+            Set<String> scannedLocations = new HashSet<>();
             while (beansXmls.hasMoreElements()) {
                 java.net.URL beansUrl = beansXmls.nextElement();
-                if (!"jar".equals(beansUrl.getProtocol())) {
-                    continue;
+                if ("jar".equals(beansUrl.getProtocol())) {
+                    scanJarArchive(beansUrl, cl, classes, scannedLocations);
+                } else if ("file".equals(beansUrl.getProtocol())) {
+                    scanFileArchive(beansUrl, cl, classes, scannedLocations);
                 }
-                java.net.JarURLConnection conn =
-                        (java.net.JarURLConnection) beansUrl.openConnection();
-                String jarPath = conn.getJarFileURL().toString();
-                if (!scannedJars.add(jarPath)) {
-                    continue; // Already scanned this JAR
-                }
-                try (java.util.jar.JarFile jar = conn.getJarFile()) {
-                    java.util.Enumeration<java.util.jar.JarEntry> entries = jar.entries();
-                    while (entries.hasMoreElements()) {
-                        java.util.jar.JarEntry entry = entries.nextElement();
-                        String name = entry.getName();
-                        if (!name.endsWith(".class") || name.contains("$")) {
-                            continue;
-                        }
-                        if (isVendorOrJdkPath(name)) {
-                            continue;
-                        }
-                        String className = name.replace('/', '.').replace(".class", "");
-                        try {
-                            classes.add(cl.loadClass(className));
-                        } catch (ClassNotFoundException | NoClassDefFoundError e) {
-                            // Skip — class may have unsatisfied dependencies
-                        }
+            }
+        } catch (Exception e) {
+            LOG.warning("[DynamicTestBean] Failed to scan classpath archives: " + e.getMessage());
+        }
+    }
+
+    private static void scanJarArchive(java.net.URL beansUrl, ClassLoader cl,
+                                       Set<Class<?>> classes, Set<String> scannedLocations) {
+        try {
+            java.net.JarURLConnection conn =
+                    (java.net.JarURLConnection) beansUrl.openConnection();
+            String jarPath = conn.getJarFileURL().toString();
+            if (!scannedLocations.add(jarPath)) {
+                return;
+            }
+            try (java.util.jar.JarFile jar = conn.getJarFile()) {
+                java.util.Enumeration<java.util.jar.JarEntry> entries = jar.entries();
+                while (entries.hasMoreElements()) {
+                    java.util.jar.JarEntry entry = entries.nextElement();
+                    String name = entry.getName();
+                    if (!name.endsWith(".class") || name.contains("$")) {
+                        continue;
+                    }
+                    if (isVendorOrJdkPath(name)) {
+                        continue;
+                    }
+                    String className = name.replace('/', '.').replace(".class", "");
+                    try {
+                        classes.add(cl.loadClass(className));
+                    } catch (ClassNotFoundException | NoClassDefFoundError e) {
+                        // Skip — class may have unsatisfied dependencies
                     }
                 }
             }
         } catch (Exception e) {
-            LOG.warning("[DynamicTestBean] Failed to scan classpath JARs: " + e.getMessage());
+            LOG.warning("[DynamicTestBean] Failed to scan JAR: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Scans an exploded directory bean archive. The {@code beansUrl} points
+     * to {@code <root>/META-INF/beans.xml}; the root directory is derived
+     * by stripping the {@code META-INF/beans.xml} suffix.
+     */
+    private static void scanFileArchive(java.net.URL beansUrl, ClassLoader cl,
+                                        Set<Class<?>> classes, Set<String> scannedLocations) {
+        try {
+            File beansFile = new File(beansUrl.toURI());
+            // beans.xml is at <root>/META-INF/beans.xml → root is parent.parent
+            File rootDir = beansFile.getParentFile().getParentFile();
+            if (rootDir == null || !rootDir.isDirectory()) {
+                return;
+            }
+            String rootPath = rootDir.getAbsolutePath();
+            if (!scannedLocations.add(rootPath)) {
+                return;
+            }
+            scanDirectory(rootDir, rootDir, cl, classes);
+        } catch (Exception e) {
+            LOG.warning("[DynamicTestBean] Failed to scan directory: " + e.getMessage());
         }
     }
 
@@ -826,24 +887,101 @@ public class DynamicTestBeanJUnitExtension implements TestBeanContainerManager {
         return result;
     }
 
-    private static boolean isBuiltInType(Type type) {
+    /**
+     * Returns {@code true} if the given type is a built-in type that
+     * should not be mocked.
+     *
+     * <p>JDK types ({@code java.*}) are only considered built-in when
+     * they carry no custom qualifiers. A JDK type with a custom qualifier
+     * (e.g. {@code @BatchProperty String}) is typically produced by an
+     * {@code InjectionPoint}-aware producer and must be collected so a
+     * mock can be registered when the producer is absent.</p>
+     */
+    private static boolean isBuiltInType(Type type, Set<AnnotationInstance> qualifiers) {
         String name = type.name().toString();
-        return name.startsWith("java.")
-                || name.startsWith("javax.")
+
+        // CDI/Quarkus internals — always skip
+        if (name.startsWith("javax.")
                 || name.startsWith("jakarta.")
-                || name.startsWith("io.quarkus.arc.");
+                || name.startsWith("io.quarkus.arc.")) {
+            return true;
+        }
+
+        // JDK types without custom qualifiers are built-in; with custom
+        // qualifiers they are expected to come from producer methods.
+        if (name.startsWith("java.")) {
+            return !hasCustomQualifier(qualifiers);
+        }
+
+        return false;
     }
 
-    private static boolean isSatisfied(Type requiredType,
-                                       Set<AnnotationInstance> requiredQualifiers,
-                                       List<BeanInfo> beans) {
-        for (BeanInfo bean : beans) {
-            if (bean.getTypes().stream().anyMatch(t -> t.equals(requiredType))) {
-                // Simple type match — for a more robust check we'd use BeanResolver
+    private static final DotName DOT_DEFAULT =
+            DotName.createSimple("jakarta.enterprise.inject.Default");
+    private static final DotName DOT_ANY =
+            DotName.createSimple("jakarta.enterprise.inject.Any");
+    private static final DotName DOT_NAMED =
+            DotName.createSimple("jakarta.inject.Named");
+
+    private static boolean hasCustomQualifier(Set<AnnotationInstance> qualifiers) {
+        for (AnnotationInstance q : qualifiers) {
+            DotName qName = q.name();
+            if (!qName.equals(DOT_DEFAULT)
+                    && !qName.equals(DOT_ANY)
+                    && !qName.equals(DOT_NAMED)) {
                 return true;
             }
         }
         return false;
+    }
+
+    /**
+     * Checks whether the given injection point (type + qualifiers) is
+     * satisfied by at least one bean.
+     *
+     * <p>A bean matches when its type set contains the required type
+     * <em>and</em> its qualifier set contains every required qualifier
+     * (by annotation name — member values are ignored here since
+     * {@code @Nonbinding} deduplication happens separately).</p>
+     */
+    private static boolean isSatisfied(Type requiredType,
+                                       Set<AnnotationInstance> requiredQualifiers,
+                                       List<BeanInfo> beans) {
+        for (BeanInfo bean : beans) {
+            if (bean.getTypes().stream().noneMatch(t -> t.equals(requiredType))) {
+                continue;
+            }
+            // Type matches — now check that all required qualifiers are present
+            if (qualifiersMatch(requiredQualifiers, bean.getQualifiers())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Returns {@code true} if every required qualifier (by name) is present
+     * in the bean's qualifier set. Implicit qualifiers ({@code @Default},
+     * {@code @Any}) on the required side are ignored since they are always
+     * satisfied.
+     */
+    private static boolean qualifiersMatch(Set<AnnotationInstance> required,
+                                           Collection<AnnotationInstance> beanQualifiers) {
+        Set<DotName> beanQualifierNames = new HashSet<>();
+        for (AnnotationInstance q : beanQualifiers) {
+            beanQualifierNames.add(q.name());
+        }
+        for (AnnotationInstance rq : required) {
+            DotName rqName = rq.name();
+            // Implicit qualifiers are always satisfied
+            if (rqName.equals(DOT_DEFAULT) || rqName.equals(DOT_ANY)) {
+                continue;
+            }
+            if (!beanQualifierNames.contains(rqName)) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private static final DotName DEPENDENT = DotName.createSimple("jakarta.enterprise.context.Dependent");

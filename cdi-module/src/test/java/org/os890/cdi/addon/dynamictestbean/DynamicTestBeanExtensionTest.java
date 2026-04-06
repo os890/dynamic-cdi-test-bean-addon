@@ -57,6 +57,9 @@ import org.os890.cdi.addon.dynamictestbean.usecase.OrderService;
 import org.os890.cdi.addon.dynamictestbean.usecase.PaymentService;
 import org.os890.cdi.addon.dynamictestbean.usecase.QualifierConsumer;
 import org.os890.cdi.addon.dynamictestbean.usecase.SelfContainedService;
+import org.os890.cdi.addon.dynamictestbean.usecase.BatchPropertyConsumer;
+import org.os890.cdi.addon.dynamictestbean.usecase.DuplicateNameConsumer;
+import org.os890.cdi.addon.dynamictestbean.usecase.MultiQualifiedPropertyConsumer;
 import org.os890.cdi.addon.dynamictestbean.usecase.ShippingService;
 import org.os890.cdi.addon.dynamictestbean.usecase.StereotypedService;
 import org.os890.cdi.addon.dynamictestbean.usecase.ValidationService;
@@ -526,6 +529,90 @@ class DynamicTestBeanExtensionTest {
         assertNotNull(consumer);
         assertNotNull(consumer.getGreeting(), "Greeting dependency should be injected");
         assertNotNull(consumer.getNotificationSender(), "NotificationSender dependency should be injected");
+    }
+
+    // ================================================================
+    // 16. Qualified JDK type — @BatchProperty String (InjectionPoint-aware producer absent)
+    // ================================================================
+
+    @Test
+    @org.junit.jupiter.api.Order(90)
+    @DisplayName("@BatchProperty String injection points are satisfied when producer is absent")
+    void batchPropertyStringInjectionPointsAreSatisfied() {
+        BatchPropertyConsumer consumer = container.select(BatchPropertyConsumer.class).get();
+        assertNotNull(consumer, "BatchPropertyConsumer should be resolvable");
+    }
+
+    @Test
+    @org.junit.jupiter.api.Order(91)
+    @DisplayName("@BatchProperty String values are null (Mockito/mock default)")
+    void batchPropertyStringValuesAreNull() {
+        BatchPropertyConsumer consumer = container.select(BatchPropertyConsumer.class).get();
+
+        // Both fields are @BatchProperty String — without the real producer,
+        // the mock bean returns null (consistent with Mockito defaults).
+        assertNull(consumer.getJobName(),
+                "@BatchProperty(name=\"job.name\") should resolve to null");
+        assertNull(consumer.getChunkSize(),
+                "@BatchProperty(name=\"chunk.size\") should resolve to null");
+    }
+
+    // ================================================================
+    // 17. Same simple name in different packages — unique mock names
+    // ================================================================
+
+    @Test
+    @org.junit.jupiter.api.Order(95)
+    @DisplayName("Same simple name in different packages: both injection points are satisfied")
+    void duplicateSimpleNameBothSatisfied() {
+        DuplicateNameConsumer consumer = container.select(DuplicateNameConsumer.class).get();
+        assertNotNull(consumer.getServiceA(), "pkga.DuplicateNameService should be injected");
+        assertNotNull(consumer.getServiceB(), "pkgb.DuplicateNameService should be injected");
+    }
+
+    @Test
+    @org.junit.jupiter.api.Order(96)
+    @DisplayName("Same simple name in different packages: mocks are distinct instances")
+    void duplicateSimpleNameMocksAreDistinct() {
+        DuplicateNameConsumer consumer = container.select(DuplicateNameConsumer.class).get();
+        // Both are Mockito mocks of different interfaces — they must not be the same instance
+        assertNotNull(consumer.getServiceA());
+        assertNotNull(consumer.getServiceB());
+        assertNull(consumer.getServiceA().greetA(), "Mock should return null (Mockito default)");
+        assertNull(consumer.getServiceB().greetB(), "Mock should return null (Mockito default)");
+    }
+
+    // ================================================================
+    // 18. Multiple qualifiers with @Nonbinding on the same JDK type
+    // ================================================================
+
+    @Test
+    @org.junit.jupiter.api.Order(100)
+    @DisplayName("Different qualifiers on same JDK type: all injection points satisfied")
+    void multiQualifiedPropertyAllSatisfied() {
+        MultiQualifiedPropertyConsumer consumer =
+                container.select(MultiQualifiedPropertyConsumer.class).get();
+        assertNotNull(consumer, "MultiQualifiedPropertyConsumer should be resolvable");
+    }
+
+    @Test
+    @org.junit.jupiter.api.Order(101)
+    @DisplayName("Different qualifiers on same JDK type: all values are null (mock default)")
+    void multiQualifiedPropertyAllNull() {
+        MultiQualifiedPropertyConsumer consumer =
+                container.select(MultiQualifiedPropertyConsumer.class).get();
+
+        // @BatchProperty fields — both share one mock (name is @Nonbinding)
+        assertNull(consumer.getBatchJobName(),
+                "@BatchProperty(name=\"batch.jobName\") should be null");
+        assertNull(consumer.getBatchStepId(),
+                "@BatchProperty(name=\"batch.stepId\") should be null");
+
+        // @ConfigProperty fields — both share a different mock (separate qualifier type)
+        assertNull(consumer.getConfigTimeout(),
+                "@ConfigProperty(name=\"app.timeout\") should be null");
+        assertNull(consumer.getConfigRetries(),
+                "@ConfigProperty(name=\"app.retries\") should be null");
     }
 
 }
