@@ -183,6 +183,12 @@
                                         </excludes>
                                         <message>Use jakarta.* dependencies instead of javax.*.</message>
                                     </bannedDependencies>
+                                    <requireFileChecksum>
+                                        <file>${maven.multiModuleProjectDirectory}/LICENSE</file>
+                                        <checksum>3b83ef96387f14655fc854ddc3c6bd57</checksum>
+                                        <type>md5</type>
+                                        <message>LICENSE must be the official Apache License 2.0 text from https://www.apache.org/licenses/LICENSE-2.0.txt</message>
+                                    </requireFileChecksum>
                                 </rules>
                                 <fail>true</fail>
                             </configuration>
